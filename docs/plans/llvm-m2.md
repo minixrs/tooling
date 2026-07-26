@@ -17,12 +17,14 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: Steps 1–3 ready on `minixrs/release/22.x`, unpushed; Step 4 is
-next.** The triple, its unit tests and the preprocessor target are committed
-(`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`), so `check-driver.sh` step
-1/3 passes and steps 2/3 still fail — there is no MinixRS toolchain yet, and
-`-###` falls through to `/usr/bin/gcc`. `tooling/patches/llvm/` stays empty
-until Step 6 exports the series. Markers follow `tooling/docs/roadmap.md`:
+**Status: Steps 1–4 ready on `minixrs/release/22.x`; Step 5 is next.** The
+triple, its unit tests, the preprocessor target and the driver toolchain are
+committed (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`, `0a0281f3c447`),
+so **`check-driver.sh` is green end to end** — it still SKIPs its crt/sysroot
+assertions, which need the P3 sysroot. What is left is the lit test that
+pins the link line (Step 5) and the wrap-up (Step 6);
+`tooling/patches/llvm/` stays empty until Step 6 exports the series. Markers
+follow `tooling/docs/roadmap.md`:
 `◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
 merged YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in
 the roadmap's phase graph when the whole series ships — it stays `◀ next`
@@ -195,9 +197,11 @@ CLANG=$MINIXRS_FORKS_DIR/llvm-minixrs/build-minixrs/bin/clang \
     verify/check-driver.sh
 ```
 
-## Step 4 — driver toolchain ◀ next
+## Step 4 — driver toolchain ◀ ready (branch minixrs/release/22.x, pending merge)
 
-New `clang/lib/Driver/ToolChains/MinixRS.{h,cpp}`, Fuchsia/NetBSD-shaped.
+New `clang/lib/Driver/ToolChains/MinixRS.{h,cpp}`, Fuchsia-shaped: derived
+from `ToolChain` directly rather than from `Generic_ELF`, so none of the
+GCC-detection machinery applies to a platform that will never have a GCC.
 Register it in:
 
 - `clang/lib/Driver/CMakeLists.txt` — add `ToolChains/MinixRS.cpp` to the
@@ -216,7 +220,7 @@ Behavior is fixed by `docs/sysroot-layout.md`, not invented here:
 
 | Requirement | Implementation |
 |---|---|
-| `ld.lld` is the linker | `GetDefaultLinker()` returns `"lld"` |
+| `ld.lld` is the linker | `getDefaultLinker()` returns `"ld.lld"` |
 | static only — no `.so`, no dynamic linker | always push `-static`; no `-shared`/`-pie` paths |
 | crt objects from `<sysroot>/usr/lib` | `crt1.o crti.o` … `crtn.o` via `GetFilePath` |
 | `-L<sysroot>/usr/lib` | `AddFilePathLibArgs` / explicit `-L` |
@@ -230,19 +234,66 @@ Both `-z` values are real lld options (`lld/ELF/Driver.cpp` parses
 pairs the way `Fuchsia.cpp` does.
 
 **Sysroot resolution.** `--sysroot` wins if given; otherwise compute it
-relative to the driver binary:
+relative to the driver binary. `ToolChain::computeSysRoot()` is already a
+virtual with exactly these semantics ("return the sysroot, possibly searching
+for a default using target-specific logic"), so this is an `override`, not a
+new helper:
 
 ```cpp
   SmallString<128> P(getDriver().Dir);   // $MINIXRS_SDK/bin
   llvm::sys::path::append(P, "..", "sysroot");
+  llvm::sys::path::remove_dots(P, /*remove_dot_dot=*/true);
 ```
 
 Since clang installs to `$MINIXRS_SDK/bin` and the sysroot is
 `$MINIXRS_SDK/sysroot`, this satisfies the layout contract's "nothing may
 hard-code this path" rule without a configure-time `DEFAULT_SYSROOT` — the
-SDK stays relocatable.
+SDK stays relocatable. The `remove_dots` call matters for the *gate*, not
+just for tidiness: `check-driver.sh` greps the link line for
+`$MINIXRS_SDK/sysroot/usr/lib/crt1.o` literally, which a
+`…/bin/../sysroot/…` spelling would not match once P3 installs the sysroot
+and those assertions stop being SKIPped.
 
-## Step 5 — driver test — unstarted
+**On `-static` versus `-Bstatic`.** `Fuchsia.cpp` pushes `-Bstatic`; this
+driver pushes `-static`, which lld defines as an alias for it
+(`lld/ELF/Options.td`). The distinction is not cosmetic — `check-driver.sh`
+step 2 greps for `-static`, and `-Bstatic` does not contain that substring.
+
+**On flags the platform cannot honour.** A static-only target gets asked for
+dynamic things by build systems that do not know better, and the driver has
+to answer each one deliberately — silently dropping them is how a user ends
+up holding an artifact that is not what they asked for. The line is *output
+kind* versus *executable property*:
+
+| Flag | Answer | Why |
+|---|---|---|
+| `-shared` | hard error, `err_drv_unsupported_opt_for_target` | a different output kind; ignoring it yields a static executable named `libfoo.so` |
+| `-pie`, `-no-pie` | claimed, ignored | properties minixrs pins; the artifact is right either way |
+| `-rdynamic` | claimed, ignored | no dynamic symbol table to export |
+
+Leaving `-shared` merely *unclaimed* is not enough: that is only a
+`-Wunused-command-line-argument` warning, which plenty of builds silence, and
+the wrong `.so` still gets written.
+
+**Known gap.** `GetCXXStdlibType` pins libc++, but there is no
+`AddClangCXXStdlibIncludeArgs` override — nothing would be on the other end
+of it until a C++ standard library exists in the sysroot. Crib Fuchsia's when
+one does.
+
+**Verified link line** (build-dir clang, no sysroot installed, so the crt
+names stay unresolved):
+
+```
+ld.lld -static -z max-page-size=4096 -z separate-loadable-segments
+       --eh-frame-hdr -o … crt1.o crti.o -L<sysroot>/usr/lib …
+       libclang_rt.builtins.a -lc crtn.o
+```
+
+**Reached.** `check-driver.sh` passes all three steps against the build-dir
+clang, including linking `verify/testdata/branded.s` and brand-checking the
+result. Its crt/sysroot assertions still SKIP — the sysroot arrives in P3.
+
+## Step 5 — driver test ◀ next
 
 `clang/test/Driver/minixrs.c`, FileCheck'ing the `-###` line for the linker
 name, `-static`, both `-z` pairs, and the crt/`-L` paths, plus

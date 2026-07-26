@@ -17,14 +17,13 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: all six steps ready on `minixrs/release/22.x`; the branch is
-unpushed.** The triple, its unit tests, the preprocessor target, the driver
-toolchain and its lit test are committed (`2963205c993d`, `9018ff2ecf44`,
-`8f6f13694e9e`, `0a0281f3c447`, `4ca768bbedad`), **`check-driver.sh` is green
-end to end** — it still SKIPs its crt/sysroot assertions, which need the P3
-sysroot — `check-clang-driver` is clean at 1403 tests, and the five-patch
-series is exported to `tooling/patches/llvm/`. What is left is review and
-`git push origin minixrs/release/22.x`. Markers
+**Status: shipped (PR #1, merged 2026-07-26).** The triple, its unit tests,
+the preprocessor target, the driver toolchain and its lit test are on
+`minixrs/release/22.x` (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`,
+`0a0281f3c447`, `4ca768bbedad`), **`check-driver.sh` is green end to end** —
+it still SKIPs its crt/sysroot assertions, which need the P3 sysroot —
+`check-clang-driver` is clean at 1403 tests, and the five-patch series is
+exported to `tooling/patches/llvm/`. Markers
 follow `tooling/docs/roadmap.md`:
 `◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
 merged YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in
@@ -48,7 +47,7 @@ patch series.
 
 ---
 
-## Step 1 — the triple ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 1 — the triple ✓ shipped (PR #1, merged 2026-07-26)
 
 `llvm/include/llvm/TargetParser/Triple.h`, in `enum OSType`:
 
@@ -116,7 +115,7 @@ outside `Triple.{h,cpp}`. `Triple.h` is still a hub header, so budget for the
 broad rebuild it triggers (~1830 edges here) even though no follow-on edit
 was needed.
 
-## Step 2 — triple tests ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 2 — triple tests ✓ shipped (PR #1, merged 2026-07-26)
 
 `llvm/unittests/TargetParser/TripleTest.cpp`:
 
@@ -139,7 +138,7 @@ ninja TargetParserTests && ./unittests/TargetParser/TargetParserTests \
     --gtest_filter='TripleTest.*'
 ```
 
-## Step 3 — preprocessor target ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 3 — preprocessor target ✓ shipped (PR #1, merged 2026-07-26)
 
 `clang/lib/Basic/Targets/OSTargets.h`, modeled on `FuchsiaTargetInfo` (same
 file), which is the closest shape: a small static-first ELF OS with no
@@ -198,7 +197,7 @@ CLANG=$MINIXRS_FORKS_DIR/llvm-minixrs/build-minixrs/bin/clang \
     verify/check-driver.sh
 ```
 
-## Step 4 — driver toolchain ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 4 — driver toolchain ✓ shipped (PR #1, merged 2026-07-26)
 
 New `clang/lib/Driver/ToolChains/MinixRS.{h,cpp}`, Fuchsia-shaped: derived
 from `ToolChain` directly rather than from `Generic_ELF`, so none of the
@@ -294,7 +293,7 @@ ld.lld -static -z max-page-size=4096 -z separate-loadable-segments
 clang, including linking `verify/testdata/branded.s` and brand-checking the
 result. Its crt/sysroot assertions still SKIP — the sysroot arrives in P3.
 
-## Step 5 — driver test ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 5 — driver test ✓ shipped (PR #1, merged 2026-07-26)
 
 `clang/test/Driver/minixrs.c`, FileCheck'ing the `-###` line for the linker
 name, `-static`, both `-z` pairs, and the crt/`-L` paths, plus
@@ -373,7 +372,7 @@ assertion.
 ninja check-clang-driver     # 1403 tests, 1320 passed, 82 unsupported, 1 XFAIL
 ```
 
-## Step 6 — wrap-up ◀ ready (branch minixrs/release/22.x, pending merge)
+## Step 6 — wrap-up ✓ shipped (PR #1, merged 2026-07-26)
 
 From the build dir:
 

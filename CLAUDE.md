@@ -18,10 +18,10 @@ repo, so both trackers read alike:
 - `◀ ready (branch …, pending merge)` — implemented but unmerged
 - `✓ shipped (PR #N, merged YYYY-MM-DD)` — merged
 
-This repo does not run a PR workflow yet — changes land directly on `main`,
-so its own entries use `✓ shipped (commit <sha>, YYYY-MM-DD)`. Switch to the
-`PR #N` form once formal review is in place. Items owned by another repo keep
-that repo's form (M1 shipped as minixrs PR #44).
+This repo runs a PR workflow as of PR #1, so its own entries use
+`✓ shipped (PR #N, merged YYYY-MM-DD)`. Entries predating it keep the
+`✓ shipped (commit <sha>, YYYY-MM-DD)` form they landed with. Items owned by
+another repo keep that repo's form (M1 shipped as minixrs PR #44).
 
 Flip the previous item forward and slide `◀ next` ahead as part of each
 change, in **both** the roadmap phase graph and the matching `docs/plans/`

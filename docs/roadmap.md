@@ -38,10 +38,11 @@ two trackers read alike:
 - `◀ ready (branch …, pending merge)` — implemented but unmerged
 - `✓ shipped (PR #N, merged YYYY-MM-DD)` — merged
 
-This repo does not run a PR workflow yet — changes land directly on `main`,
-so its own entries use `✓ shipped (commit <sha>, YYYY-MM-DD)`. Switch to the
-`PR #N` form once formal review is in place. Items owned by another repo keep
-that repo's form (M1 shipped as minixrs PR #44).
+This repo runs a PR workflow as of PR #1, so entries use
+`✓ shipped (PR #N, merged YYYY-MM-DD)`. Entries predating it keep the
+`✓ shipped (commit <sha>, YYYY-MM-DD)` form they landed with — P0 and P2a went
+straight to `main`. Items owned by another repo keep that repo's form (M1
+shipped as minixrs PR #44).
 
 Flip the previous item forward and slide `◀ next` ahead as part of each
 change, in **both** the phase graph below and the matching `plans/` detail
@@ -54,7 +55,7 @@ work — "pending merge" labels on already-merged work accumulate otherwise.
 P0  tooling bootstrap (this repo)                            ✓ shipped (commit afbdc66, 2026-07-25)
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
-P2b [llvm-minixrs] M2: the patch series — triple + driver    ◀ ready (branch minixrs/release/22.x, pending merge)
+P2b [llvm-minixrs] M2: the patch series — triple + driver    ✓ shipped (PR #1, merged 2026-07-26)
 P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ◀ next — OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
 P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 + slice 5.6 ABI freeze
 P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
@@ -111,7 +112,7 @@ Two halves, tracked separately because they land in different repos:
 proved the volume, CMake 4.3, Xcode 26.6, and the `$MINIXRS_SDK` install
 layout before any patch was in flight.
 
-### P2b — the LLVM patch series (llvm-minixrs) ◀ ready (branch minixrs/release/22.x, pending merge)
+### P2b — the LLVM patch series (llvm-minixrs) ✓ shipped (PR #1, merged 2026-07-26)
 
 Full patch plan: [plans/llvm-m2.md](plans/llvm-m2.md). Execute in
 `$MINIXRS_FORKS_DIR/llvm-minixrs`; no LLVM source is edited from this repo

@@ -17,12 +17,18 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: `◀ next` — not started.** Zero commits exist beyond
-`llvmorg-22.1.8`, so `tooling/patches/llvm/` is correctly empty; it fills
-only at Step 6. Markers follow `tooling/docs/roadmap.md`: `◀ next`
-(unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N, merged
-YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in the
-roadmap's phase graph when the whole series ships.
+**Status: Steps 1–3 ready on `minixrs/release/22.x`, unpushed; Step 4 is
+next.** The triple, its unit tests and the preprocessor target are committed
+(`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`), so `check-driver.sh` step
+1/3 passes and steps 2/3 still fail — there is no MinixRS toolchain yet, and
+`-###` falls through to `/usr/bin/gcc`. `tooling/patches/llvm/` stays empty
+until Step 6 exports the series. Markers follow `tooling/docs/roadmap.md`:
+`◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
+merged YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in
+the roadmap's phase graph when the whole series ships — it stays `◀ next`
+while the series is only partly implemented, since the three-marker
+convention has no in-progress state and these per-step markers carry that
+granularity.
 
 ## Preconditions
 
@@ -39,18 +45,28 @@ patch series.
 
 ---
 
-## Step 1 — the triple ◀ next
+## Step 1 — the triple ◀ ready (branch minixrs/release/22.x, pending merge)
 
 `llvm/include/llvm/TargetParser/Triple.h`, in `enum OSType`:
 
-**Append `MinixRS` after `Firmware` and move `LastOSType` onto it.** Do not
+**Append `MinixRS` after `CheriotRTOS` and move `LastOSType` onto it.** Do not
 insert it alphabetically — the enum values are ordinals, and renumbering the
 existing OSes is a gratuitous ABI change for a fork that has to rebase.
 
 ```cpp
-    Firmware,
+    CheriotRTOS,
     MinixRS,    // minixrs — see tooling/docs/roadmap.md
     LastOSType = MinixRS
+```
+
+**On the anchor.** An earlier draft named `Firmware` as the enum tail.
+**There is no `Firmware` OSType at this pin**; the tail is `… Vulkan,
+CheriotRTOS, LastOSType = CheriotRTOS`. The intent is unchanged — append at
+the end — but confirm the anchor before editing, the same way the ordering
+hazard below is confirmed:
+
+```sh
+grep -n "LastOSType" llvm/include/llvm/TargetParser/Triple.h
 ```
 
 Add the predicate next to the other `isOS*` helpers:
@@ -89,11 +105,15 @@ direction: `StartsWith` means that if a future rebase reintroduces a `minix`
 arm, it must be ordered **after** `minixrs`, or the longer name gets
 shadowed. Nothing currently in the switch is a prefix of `minixrs`.
 
-Expect the build to point at a few exhaustive `switch (OS)` statements that
-now need a `MinixRS` case; add them as the compiler finds them rather than
-hunting up front.
+This was expected to point at a few exhaustive `switch (OS)` statements
+needing a `MinixRS` case. **It pointed at none** — a full `ninja clang
+TargetParserTests` came back with zero warnings and zero errors, matching an
+up-front `grep -rn "Triple::CheriotRTOS" llvm clang lld`, which finds no site
+outside `Triple.{h,cpp}`. `Triple.h` is still a hub header, so budget for the
+broad rebuild it triggers (~1830 edges here) even though no follow-on edit
+was needed.
 
-## Step 2 — triple tests — unstarted
+## Step 2 — triple tests ◀ ready (branch minixrs/release/22.x, pending merge)
 
 `llvm/unittests/TargetParser/TripleTest.cpp`:
 
@@ -116,7 +136,7 @@ ninja TargetParserTests && ./unittests/TargetParser/TargetParserTests \
     --gtest_filter='TripleTest.*'
 ```
 
-## Step 3 — preprocessor target — unstarted
+## Step 3 — preprocessor target ◀ ready (branch minixrs/release/22.x, pending merge)
 
 `clang/lib/Basic/Targets/OSTargets.h`, modeled on `FuchsiaTargetInfo` (same
 file), which is the closest shape: a small static-first ELF OS with no
@@ -153,6 +173,9 @@ public:
                                                                       Opts);
 ```
 
+The AArch64**be** switch (same file) is deliberately left alone — minixrs is
+little-endian only.
+
 Checkpoint — this alone satisfies `check-driver.sh` step 1:
 
 ```sh
@@ -160,7 +183,19 @@ ninja clang && ./bin/clang --target=aarch64-unknown-minixrs -dM -E -x c /dev/nul
     | grep -E '__minixrs__|__unix__|__ELF__'
 ```
 
-## Step 4 — driver toolchain — unstarted
+**Reached.** All five defines emit, and the gate — run against the build-dir
+clang, which `check-driver.sh` honors via `CLANG=` so no SDK reinstall is
+needed — reports `PASS __minixrs__, __unix__, __ELF__ defined` at step 1/3
+while steps 2/3 still fail (`-###` drives `/usr/bin/gcc`, no `-static`, no
+`-z` flags). Overall exit 1 is the correct state at this checkpoint; Step 4
+closes the rest.
+
+```sh
+CLANG=$MINIXRS_FORKS_DIR/llvm-minixrs/build-minixrs/bin/clang \
+    verify/check-driver.sh
+```
+
+## Step 4 — driver toolchain ◀ next
 
 New `clang/lib/Driver/ToolChains/MinixRS.{h,cpp}`, Fuchsia/NetBSD-shaped.
 Register it in:

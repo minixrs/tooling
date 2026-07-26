@@ -126,12 +126,23 @@ fi
 # one language build for the host instead, and the archive still installs:
 # ld.lld only warns ("neither ET_REL nor LLVM bitcode") and silently drops the
 # member, so whatever it defined goes missing at link time rather than here.
-BAD="$("$MINIXRS_SDK/bin/llvm-objdump" -f "$LIB" 2>/dev/null |
-       grep "file format" | grep -vc "elf64-littleaarch64" || true)"
-if [ "$BAD" != "0" ]; then
-    echo "build-compiler-rt: $BAD member(s) of $LIB are not elf64-littleaarch64" >&2
-    "$MINIXRS_SDK/bin/llvm-objdump" -f "$LIB" 2>/dev/null |
-        grep -B1 "file format" | grep -v "elf64-littleaarch64" >&2
+#
+# The check has to fail *closed*. Counting only mismatches is not enough: a
+# missing llvm-objdump, a read error, or an empty archive each yield zero
+# lines, therefore zero mismatches, therefore a cheerful pass — which is the
+# same quiet-success class this check exists to catch. So require a positive
+# count of good members as well, and let objdump's own errors through.
+OBJDUMP="$MINIXRS_SDK/bin/llvm-objdump"
+if [ ! -x "$OBJDUMP" ]; then
+    echo "build-compiler-rt: $OBJDUMP is missing or not executable — cannot verify $LIB" >&2
     exit 1
 fi
-echo "build-compiler-rt: installed $LIB"
+FORMATS="$("$OBJDUMP" -f "$LIB" | grep "file format" || true)"
+GOOD="$(printf '%s\n' "$FORMATS" | grep -c "elf64-littleaarch64" || true)"
+BAD="$(printf '%s\n' "$FORMATS" | grep -v "elf64-littleaarch64" | grep -c "file format" || true)"
+if [ "$GOOD" -lt 1 ] || [ "$BAD" -ne 0 ]; then
+    echo "build-compiler-rt: $LIB failed verification — $GOOD elf64-littleaarch64 member(s), $BAD other" >&2
+    printf '%s\n' "$FORMATS" | grep -v "elf64-littleaarch64" >&2
+    exit 1
+fi
+echo "build-compiler-rt: installed $LIB ($GOOD members, all elf64-littleaarch64)"

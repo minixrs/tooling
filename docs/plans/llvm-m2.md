@@ -20,7 +20,7 @@ carries the identity note.
 **Status: all six steps ready on `minixrs/release/22.x`; the branch is
 unpushed.** The triple, its unit tests, the preprocessor target, the driver
 toolchain and its lit test are committed (`2963205c993d`, `9018ff2ecf44`,
-`8f6f13694e9e`, `0a0281f3c447`, `3cc1fda07298`), **`check-driver.sh` is green
+`8f6f13694e9e`, `0a0281f3c447`, `4ca768bbedad`), **`check-driver.sh` is green
 end to end** — it still SKIPs its crt/sysroot assertions, which need the P3
 sysroot — `check-clang-driver` is clean at 1403 tests, and the five-patch
 series is exported to `tooling/patches/llvm/`. What is left is review and
@@ -329,12 +329,15 @@ only in the gaps *between* the positive matches that surround it. That one
 rule shapes three decisions in this test, and it is the easiest way to write
 an assertion that cannot fail:
 
-- The no-dots check gets **its own FileCheck run with no positive directive**,
-  which makes its scan region the whole output. It cannot live in the
-  default-sysroot run, because that run's `-L{{[^"]*}}/sysroot/usr/lib`
-  pattern spells the middle of the path as a wildcard — so it *also matches*,
-  and therefore consumes, the unfolded `-L…/bin/../sysroot/usr/lib` the `-NOT`
-  is there to reject.
+- The no-dots check gets **its own FileCheck run**, anchored on the earliest
+  token of the cc1 line and nothing else. Every path that could carry an
+  unfolded spelling comes after `"-triple"`, so the `-NOT` still covers all of
+  them, while matching `"-triple"` consumes no path text of its own — and the
+  single positive directive means the run cannot pass on empty output. It
+  cannot instead live in the default-sysroot run, because that run's
+  `-L{{[^"]*}}/sysroot/usr/lib` pattern spells the middle of the path as a
+  wildcard — so it *also matches*, and therefore consumes, the unfolded
+  `-L…/bin/../sysroot/usr/lib` the `-NOT` is there to reject.
 - The happy-path negatives (`-dynamic-linker`, `-shared`, `-pie`) are
   `--implicit-check-not` on the RUN line rather than inline `CHECK-NOT`s,
   which would have scanned only the few tokens between the second `-z` pair

@@ -1,4 +1,4 @@
-From 3cc1fda07298a56265c654cb5ce1304819c34b19 Mon Sep 17 00:00:00 2001
+From 4ca768bbedadcc67560f9a4683fe3229946b4f22 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 03:37:40 -0500
 Subject: [PATCH 5/5] [minixrs] Driver: test the MinixRS link line
@@ -20,16 +20,18 @@ Three notes on the checks themselves, all of which come down to one FileCheck
 rule: a -NOT is only tested in the gaps *between* positive matches, so text a
 positive pattern consumed is never scanned.
 
-  - the no-dots assertion gets its own FileCheck run with no positive
-    directive, which makes its scan region the whole output. It cannot live
-    in the default-sysroot run: the -L pattern there spells the middle of the
-    path {{[^"]*}}, which matches -- and so swallows -- the unfolded
-    "-L.../bin/../sysroot/usr/lib" it is meant to reject.
+  - the no-dots assertion gets its own FileCheck run, anchored on the
+    earliest token of the cc1 line and nothing else. Every path that could
+    carry an unfolded "bin/../sysroot" spelling comes after "-triple", so the
+    -NOT still covers all of them, while matching "-triple" consumes no path
+    text of its own. It cannot instead live in the default-sysroot run: the
+    -L pattern there spells the middle of the path {{[^"]*}}, which matches
+    -- and so swallows -- the very spelling the -NOT must reject.
   - the happy-path negatives (-dynamic-linker, -shared, -pie) are
     --implicit-check-not rather than inline CHECK-NOT lines, which would have
     scanned only the few tokens between the second -z pair and crt1.o.
   - the claimed-flag run is anchored on ld.lld and -static before its
-    negatives. A run of bare -NOTs would also pass on empty output, or on a
+    negatives. A run of bare -NOTs also passes on empty output, or on a
     driver that died before emitting a link line.
 
 Mutation-tested from both sides. Source side: deleting the remove_dots call
@@ -48,8 +50,8 @@ failures.
  .../minixrs_tree/sysroot/usr/lib/crti.o       |  0
  .../minixrs_tree/sysroot/usr/lib/crtn.o       |  0
  .../minixrs_tree/sysroot/usr/lib/libc.a       |  0
- clang/test/Driver/minixrs.c                   | 86 +++++++++++++++++++
- 8 files changed, 86 insertions(+)
+ clang/test/Driver/minixrs.c                   | 90 +++++++++++++++++++
+ 8 files changed, 90 insertions(+)
  create mode 100644 clang/test/Driver/Inputs/minixrs_tree/resource_dir/include/.keep
  create mode 100644 clang/test/Driver/Inputs/minixrs_tree/resource_dir/lib/aarch64-unknown-minixrs/libclang_rt.builtins.a
  create mode 100644 clang/test/Driver/Inputs/minixrs_tree/sysroot/usr/include/.keep
@@ -82,10 +84,10 @@ new file mode 100644
 index 000000000000..e69de29bb2d1
 diff --git a/clang/test/Driver/minixrs.c b/clang/test/Driver/minixrs.c
 new file mode 100644
-index 000000000000..6103eece4f2f
+index 000000000000..df0eb65672c9
 --- /dev/null
 +++ b/clang/test/Driver/minixrs.c
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,90 @@
 +// The minixrs driver: static-only ELF, ld.lld, sysroot under <sysroot>/usr.
 +// The behaviour pinned here is the tooling repo's docs/sysroot-layout.md
 +// contract, which tooling/verify/check-driver.sh gates at the SDK level.
@@ -137,8 +139,12 @@ index 000000000000..6103eece4f2f
 +// "-L{{[^"]*}}/sysroot/usr/lib" also matches the *unfolded* spelling, and a
 +// CHECK-NOT never sees text that a positive match consumed. Mutation-tested by
 +// deleting the remove_dots call in MinixRS.cpp.
++// The anchor is deliberately the earliest token on the cc1 line: every path
++// that could carry an unfolded spelling comes after it, so the -NOT still
++// covers all of them, and matching "-triple" consumes no path text.
 +// RUN: %clang -### %s --target=aarch64-unknown-minixrs 2>&1 \
 +// RUN:     | FileCheck --check-prefix=CHECK-NO-DOTS %s
++// CHECK-NO-DOTS: "-triple" "aarch64-unknown-minixrs"
 +// CHECK-NO-DOTS-NOT: bin{{/|\\\\}}..
 +
 +// RUN: %clang -dM -E %s --target=aarch64-unknown-minixrs 2>&1 \

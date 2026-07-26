@@ -12,11 +12,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-SIBLINGS_DIR="${MINIXRS_FORKS_DIR:-$(dirname "$REPO_ROOT")}"
 . "$SCRIPT_DIR/env.sh"
 
-MUSL_SRC="${MUSL_MINIXRS_SRC:-$SIBLINGS_DIR/musl-minixrs}"
+MUSL_SRC="${MUSL_MINIXRS_SRC:-$MINIXRS_FORKS_DIR/musl-minixrs}"
 CLANG="$MINIXRS_SDK/bin/clang"
 TRIPLE=aarch64-unknown-minixrs
 
@@ -27,6 +25,7 @@ build-musl: musl-minixrs source not found at $MUSL_SRC
 Clone the fork first (docs/roadmap.md P3):
     git clone <musl-minixrs-url> "$MUSL_SRC"
 or point MUSL_MINIXRS_SRC at an existing checkout.
+If the forks volume is simply unmounted: scripts/forks-volume.sh mount
 EOF
     exit 1
 fi

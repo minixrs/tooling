@@ -9,17 +9,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-SIBLINGS_DIR="${MINIXRS_FORKS_DIR:-$(dirname "$REPO_ROOT")}"
 . "$SCRIPT_DIR/env.sh"
 
-LLVM_SRC="${LLVM_MINIXRS_SRC:-$SIBLINGS_DIR/llvm-minixrs}"
+LLVM_SRC="${LLVM_MINIXRS_SRC:-$MINIXRS_FORKS_DIR/llvm-minixrs}"
 CLANG="$MINIXRS_SDK/bin/clang"
 TRIPLE=aarch64-unknown-minixrs
 
 if [ ! -d "$LLVM_SRC/compiler-rt" ]; then
     echo "build-compiler-rt: compiler-rt source not found at $LLVM_SRC/compiler-rt" >&2
     echo "build-compiler-rt: clone llvm-minixrs first (see scripts/build-llvm.sh)" >&2
+    echo "build-compiler-rt: if the forks volume is unmounted: scripts/forks-volume.sh mount" >&2
     exit 1
 fi
 if [ ! -x "$CLANG" ]; then

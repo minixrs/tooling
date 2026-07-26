@@ -9,10 +9,12 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 
 1. Rust `std` PAL sits on **musl libc** (std → libc crate → musl), the classic
    Unix route. The PAL is downstream of the C toolchain + musl sysroot.
-2. Forks are **sibling repos** (`llvm-minixrs`, `musl-minixrs`, later
-   `rust-minixrs`, `libc-minixrs`); this repo holds build scripts, cmake
-   toolchain files, sysroot assembly, patch exports, docs, and the brand
-   verifier.
+2. Forks are **separate repos** (`llvm-minixrs`, `musl-minixrs`, later
+   `rust-minixrs`, `libc-minixrs`) under the `minixrs` GitHub org, checked
+   out together in `$MINIXRS_FORKS_DIR` — a case-sensitive APFS volume, not
+   a sibling directory of this repo (see the risk register). This repo holds
+   build scripts, cmake toolchain files, sysroot assembly, patch exports,
+   docs, and the brand verifier.
 3. The first milestone is **Rust-first**: custom target JSON + `-Zbuild-std`,
    rebuild the existing minixrs userland on the new triple, PT_NOTE branding,
    kernel enforcement — no forks needed for M1.
@@ -72,9 +74,23 @@ pack assertion active; CI green.
 
 ## P2 — M2: the toolchain exists (llvm-minixrs)
 
-Branch `minixrs/release/22.x`, rebase-maintained, series exported to
-`patches/llvm/` via `scripts/export-patches.sh`. Patch surface ~350–450 lines,
-mostly new files:
+Full patch plan: [plans/llvm-m2.md](plans/llvm-m2.md).
+
+Repo **`minixrs/llvm-minixrs`** (a GitHub fork of `llvm/llvm-project` under
+the org — shares object storage upstream, so creating it costs no upload).
+Checked out at `$MINIXRS_FORKS_DIR/llvm-minixrs` on the case-sensitive volume
+(`scripts/forks-volume.sh`).
+
+**Pinned base: tag `llvmorg-22.1.8`** (`ca7933e47d3a`) — the exact LLVM the
+pinned nightly reports, so the same series later serves rustc (P4). The fork
+branches from the tag rather than the moving `release/22.x` head, which is
+what makes the exported series reproducible; `MINIXRS_LLVM_BASE` defaults to
+it.
+
+Branch `minixrs/release/22.x`, rebase-maintained and force-pushed, series
+exported to `patches/llvm/` via `scripts/export-patches.sh`. Review happens
+over that exported series, not via PRs against the fork branch. Patch surface
+~350–450 lines, mostly new files:
 
 - `llvm/include/llvm/TargetParser/Triple.h` + `Triple.cpp`: OS enum + parse
   (~10 lines); `TripleTest.cpp` coverage.
@@ -92,7 +108,12 @@ Built by `scripts/build-llvm.sh` (clang;lld, AArch64 only,
 `COMPILER_RT_DEFAULT_TARGET_ONLY`, baremetal).
 
 **M2 gate**: driver test passes; `clang --target=aarch64-unknown-minixrs`
-defines `__minixrs__` and links a branded static ELF.
+defines `__minixrs__` and links a branded static ELF — scripted as
+`verify/check-driver.sh`.
+
+Bring-up ran one unpatched `build-llvm.sh --baseline` first, so that the
+volume, CMake, host toolchain, and `$MINIXRS_SDK` install layout were all
+proven before any patch was in flight.
 
 ## P3 — M3: the sysroot exists (musl-minixrs + tooling)
 
@@ -152,6 +173,8 @@ and a public story for the OS. No schedule.
 | Nested-build blowup: 9 isolated target dirs × build-std | core compiled 9× per kernel build | shared nested `CARGO_TARGET_DIR` (M1) |
 | LLVM fork drift across 22.x point releases | rebase cost | patch surface is mostly new files — rebases are cheap; patches exported to `patches/llvm/` after every rebase |
 | minixrs nightly bumps once rust-minixrs exists | fork and pin diverge | bump both in lockstep; the pin commit is recorded in the rust-minixrs branch name/tag |
-| macOS case-insensitive FS | rust (and possibly llvm) checkouts break | case-sensitive APFS volume before first clone (`~/src/rust.sparsebundle` pattern); LLVM build ~2–4 GB; external `llvm-config` avoids a second LLVM build |
+| macOS case-insensitive FS | rust and llvm checkouts break | **automated (P2)**: `scripts/forks-volume.sh` owns a case-sensitive APFS sparsebundle at `$MINIXRS_FORKS_DIR`, and `build-llvm.sh` refuses to configure if `LLVM/CMakeLists.txt` resolves (i.e. the tree is on a folding FS). External `llvm-config` still avoids a second LLVM build at P4 |
+| Forks volume unmounted at build time | scripts report a confusing "clone the fork first" | every fork-consuming script points at `scripts/forks-volume.sh mount` in its not-found message |
+| Sparsebundle outgrows the internal SSD (rust-minixrs at P4; local Time Machine snapshots pin deleted build bands) | builds fail on ENOSPC | move the bundle to the external SSD — only `MINIXRS_FORKS_BUNDLE` changes, no script edits |
 | exec-from-FS (slice 5.9) bypasses the pack assertion | unbranded binaries reachable | the runtime `load_exec_image()` check is the authoritative gate; mkfs gets the same shared kernel-shared scan |
 | `env: ""` vs `"musl"` in the P4 target spec | crates.io cfg probes misfire | keep `env` empty; audit `cfg(target_env)` usage in early ports |

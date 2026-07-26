@@ -13,7 +13,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-SIBLINGS_DIR="${MINIXRS_FORKS_DIR:-$(dirname "$REPO_ROOT")}"
 . "$SCRIPT_DIR/env.sh"
 
 CLANG="$MINIXRS_SDK/bin/clang"
@@ -42,8 +41,7 @@ done
 # ABI selftest: minixrs' gen-c-headers diffs its generated ABI constants
 # against the sysroot headers. The exact CLI is finalized in the minixrs repo
 # (phase-5 slices 5.4+); override the whole command with MINIXRS_ABI_SELFTEST
-# if it has moved.
-MINIXRS_SRC="${MINIXRS_SRC:-$SIBLINGS_DIR/minixrs}"
+# if it has moved. MINIXRS_SRC comes from env.sh (sibling of this repo).
 if [ -n "${MINIXRS_ABI_SELFTEST:-}" ]; then
     if eval "$MINIXRS_ABI_SELFTEST"; then
         echo "build-sysroot: ABI selftest passed"

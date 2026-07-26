@@ -1,0 +1,72 @@
+From 8f6f13694e9ebd40908546bbc95c3e3571db4b49 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Sun, 26 Jul 2026 01:16:06 -0500
+Subject: [PATCH 3/5] [minixrs] Basic: add the minixrs preprocessor target
+
+MinixRSTargetInfo defines __minixrs__/__minixrs, __unix__/__unix and
+__ELF__, and sets WIntType to unsigned int. Shaped after
+FuchsiaTargetInfo -- the closest neighbour, a static-first ELF OS with no
+glibc baggage -- minus its API-level and CXXABI specifics.
+
+__ELF__ is redundant with the generic AArch64 path. Kept anyway: an
+identical redefinition is harmless, and it makes the target
+self-describing instead of dependent on a fallback.
+
+Wired into the AArch64le switch only. minixrs is little-endian only, so
+aarch64_be is deliberately left alone.
+---
+ clang/lib/Basic/Targets.cpp         |  3 +++
+ clang/lib/Basic/Targets/OSTargets.h | 23 +++++++++++++++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/clang/lib/Basic/Targets.cpp b/clang/lib/Basic/Targets.cpp
+index 263253918d96..26ac23c605c6 100644
+--- a/clang/lib/Basic/Targets.cpp
++++ b/clang/lib/Basic/Targets.cpp
+@@ -166,6 +166,9 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
+     case llvm::Triple::Managarm:
+       return std::make_unique<ManagarmTargetInfo<AArch64leTargetInfo>>(Triple,
+                                                                        Opts);
++    case llvm::Triple::MinixRS:
++      return std::make_unique<MinixRSTargetInfo<AArch64leTargetInfo>>(Triple,
++                                                                      Opts);
+     case llvm::Triple::NetBSD:
+       return std::make_unique<NetBSDTargetInfo<AArch64leTargetInfo>>(Triple,
+                                                                      Opts);
+diff --git a/clang/lib/Basic/Targets/OSTargets.h b/clang/lib/Basic/Targets/OSTargets.h
+index 04608649a863..1075c58039db 100644
+--- a/clang/lib/Basic/Targets/OSTargets.h
++++ b/clang/lib/Basic/Targets/OSTargets.h
+@@ -913,6 +913,29 @@ public:
+   }
+ };
+ 
++// minixrs target
++template <typename Target>
++class LLVM_LIBRARY_VISIBILITY MinixRSTargetInfo : public OSTargetInfo<Target> {
++protected:
++  void getOSDefines(const LangOptions &Opts, const llvm::Triple &Triple,
++                    MacroBuilder &Builder) const override {
++    Builder.defineMacro("__minixrs__");
++    Builder.defineMacro("__minixrs");
++    Builder.defineMacro("__unix__");
++    Builder.defineMacro("__unix");
++    // Redundant with InitPreprocessor's isOSBinFormatELF() path, which covers
++    // this target already. Stated anyway so the OS is self-describing rather
++    // than dependent on a fallback.
++    Builder.defineMacro("__ELF__");
++  }
++
++public:
++  MinixRSTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
++      : OSTargetInfo<Target>(Triple, Opts) {
++    this->WIntType = TargetInfo::UnsignedInt;
++  }
++};
++
+ // WebAssembly target
+ template <typename Target>
+ class LLVM_LIBRARY_VISIBILITY WebAssemblyOSTargetInfo
+-- 
+2.50.1 (Apple Git-155)
+

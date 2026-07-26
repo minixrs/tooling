@@ -17,13 +17,14 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: Steps 1–5 ready on `minixrs/release/22.x`; Step 6 is next.** The
-triple, its unit tests, the preprocessor target, the driver toolchain and its
-lit test are committed (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`,
-`0a0281f3c447`, `3cc1fda07298`), so **`check-driver.sh` is green end to end**
-— it still SKIPs its crt/sysroot assertions, which need the P3 sysroot — and
-`check-clang-driver` is clean at 1403 tests. What is left is the wrap-up:
-`tooling/patches/llvm/` stays empty until Step 6 exports the series. Markers
+**Status: all six steps ready on `minixrs/release/22.x`; the branch is
+unpushed.** The triple, its unit tests, the preprocessor target, the driver
+toolchain and its lit test are committed (`2963205c993d`, `9018ff2ecf44`,
+`8f6f13694e9e`, `0a0281f3c447`, `3cc1fda07298`), **`check-driver.sh` is green
+end to end** — it still SKIPs its crt/sysroot assertions, which need the P3
+sysroot — `check-clang-driver` is clean at 1403 tests, and the five-patch
+series is exported to `tooling/patches/llvm/`. What is left is review and
+`git push origin minixrs/release/22.x`. Markers
 follow `tooling/docs/roadmap.md`:
 `◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
 merged YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in
@@ -369,7 +370,7 @@ assertion.
 ninja check-clang-driver     # 1403 tests, 1320 passed, 82 unsupported, 1 XFAIL
 ```
 
-## Step 6 — wrap-up ◀ next
+## Step 6 — wrap-up ◀ ready (branch minixrs/release/22.x, pending merge)
 
 From the build dir:
 
@@ -390,6 +391,36 @@ scripts/export-patches.sh llvm   # populates patches/llvm/
 `check-driver.sh` will SKIP its crt/sysroot assertions until P3 installs the
 sysroot — that is expected at M2, and its step 3 (link a branded static ELF
 with `-nostdlib`) is the half of the gate that is satisfiable now.
+
+Results: `check-clang-driver` 1403 tests / 0 failures; `TargetParserTests` 645
+tests, 642 passed and 3 skipped (AIX host probes); `check-driver.sh` exit 0;
+five patches in `patches/llvm/`.
+
+**`build-compiler-rt.sh` had never actually been run.** It could not be —
+until Step 4 there was no driver for it to use — so Step 6 was its first
+execution, and it failed four times for four different reasons. None of them
+is compiler-rt being hard to cross-build; all four are CMake defaulting to the
+host and saying nothing:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| builds `clang_rt.osx`, then "no work to do" | `CMAKE_SYSTEM_NAME` defaulted to `Darwin`, so `APPLE` was true. `CMAKE_C_COMPILER_TARGET` does **not** declare a cross build | `-DCMAKE_SYSTEM_NAME=Generic` |
+| `ADD_LIBRARY called with SHARED option but the target platform does not support dynamic linking` | `load_llvm_config()` found the SDK's own LLVM — `env.sh` puts `$MINIXRS_SDK/bin` on `PATH`, and CMake derives package search prefixes from `PATH` | `-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON`, plus entering at `compiler-rt/lib/builtins` (a standalone project) rather than `compiler-rt` |
+| installs `lib/generic/libclang_rt.builtins-aarch64.a` | legacy layout; the driver only searches `lib/<triple>/` | `-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON -DLLVM_DEFAULT_TARGET_TRIPLE=<triple>` |
+| a Mach-O arm64 `emupac.cpp.obj` inside the ELF archive | `CMAKE_CXX_COMPILER` was auto-detected but `CMAKE_CXX_COMPILER_TARGET` was never set, so C++ sources built for the host | set both |
+
+The last one is the one to remember: it is **not** an error. `ld.lld` warns
+`archive member 'emupac.cpp.obj' is neither ET_REL nor LLVM bitcode`, drops
+the member, and links successfully — so the symbols it defined go missing at
+some later link instead, far from the cause. The script now asserts every
+archive member is `elf64-littleaarch64`.
+
+**Reconfiguring in place does not work here.** CMake cannot retarget an
+existing cache, and compiler-rt caches its *derived* install path as a
+`CACHE PATH` — so flipping `LLVM_ENABLE_PER_TARGET_RUNTIME_DIR` on a stale
+cache rebuilds and then installs to the old layout regardless. The script
+checks the derived `COMPILER_RT_INSTALL_LIBRARY_DIR` (`lib` = per-target,
+`lib/generic` = legacy), not just the inputs, and wipes on mismatch.
 
 Finally `git push origin minixrs/release/22.x`.
 

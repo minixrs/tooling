@@ -54,8 +54,8 @@ work — "pending merge" labels on already-merged work accumulate otherwise.
 P0  tooling bootstrap (this repo)                            ✓ shipped (commit afbdc66, 2026-07-25)
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
-P2b [llvm-minixrs] M2: the patch series — triple + driver    ◀ next
-P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   — tooling half needs P2b; OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
+P2b [llvm-minixrs] M2: the patch series — triple + driver    ◀ ready (branch minixrs/release/22.x, pending merge)
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ◀ next — OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
 P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 + slice 5.6 ABI freeze
 P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
 ```
@@ -111,7 +111,7 @@ Two halves, tracked separately because they land in different repos:
 proved the volume, CMake 4.3, Xcode 26.6, and the `$MINIXRS_SDK` install
 layout before any patch was in flight.
 
-### P2b — the LLVM patch series (llvm-minixrs) ◀ next
+### P2b — the LLVM patch series (llvm-minixrs) ◀ ready (branch minixrs/release/22.x, pending merge)
 
 Full patch plan: [plans/llvm-m2.md](plans/llvm-m2.md). Execute in
 `$MINIXRS_FORKS_DIR/llvm-minixrs`; no LLVM source is edited from this repo
@@ -156,8 +156,8 @@ defines `__minixrs__` and links a branded static ELF — scripted as
 without trusting any marker:
 
 ```sh
-verify/check-driver.sh      # P2b done → exits 0; today → fails at step 1
-ls patches/llvm/*.patch     # P2b done → ~4-5 files; today → none
+verify/check-driver.sh      # exits 0 (crt/sysroot assertions SKIP until P3)
+ls patches/llvm/*.patch     # 5 files
 ```
 
 ## P3 — M3: the sysroot exists (musl-minixrs + tooling) — blocked on P2b + slice 5.6

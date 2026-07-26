@@ -34,7 +34,7 @@ gate over trusting a marker:
 ```sh
 verify/selftest.sh          # brand verifier, needs no SDK — 3 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
-ls patches/llvm/*.patch     # non-empty only after the M2 series ships
+ls patches/llvm/*.patch     # 5 files since the P2b series was exported
 ```
 
 ## Cross-repo rule
@@ -78,6 +78,34 @@ Mount the forks volume first — every fork-consuming script fails fast without 
   `…/ccache/libexec`** — the scripts use `CMAKE_{C,CXX}_COMPILER_LAUNCHER`, and the
   symlink dir would double-wrap. Default `max_size` (5 GiB) is smaller than one LLVM
   build; raise it or the cache self-evicts to a ~0% hit rate.
+- `build-llvm.sh` reuses the same `build-minixrs` dir as a manual `ninja clang` but
+  reconfigures — expect a broader rebuild than the incremental you were just running.
+
+### Cross-building runtimes (compiler-rt today; musl and rust next)
+
+CMake defaults to the host and says nothing. All four traps below were hit on
+`build-compiler-rt.sh`'s first real run:
+
+- **`CMAKE_SYSTEM_NAME` declares a cross build**, not `CMAKE_*_COMPILER_TARGET`.
+  Without it macOS sets `APPLE`, compiler-rt builds `clang_rt.osx`, then says
+  "no work to do". Use `Generic`.
+- **Set `*_COMPILER_TARGET` for every enabled language.** A missed one builds that
+  language for the host, the Mach-O object still lands in the ELF archive, and
+  `ld.lld` only *warns* (`neither ET_REL nor LLVM bitcode`) before dropping it — so
+  the loss surfaces as missing symbols at some later link. Assert the archive is
+  uniformly `elf64-littleaarch64`.
+- **`find_package` finds the SDK's own LLVM**: `env.sh` puts `$MINIXRS_SDK/bin` on
+  `PATH`, and CMake derives package prefixes from `PATH`. Its `LLVMExports.cmake`
+  declares SHARED targets, which any correct system name for this target rejects.
+  `-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON`.
+- **Reconfiguring in place does not retarget.** CMake pins `CMAKE_SYSTEM_NAME` and
+  the source dir, and compiler-rt caches its *derived* install path — so flipping a
+  layout flag rebuilds and installs to the old location anyway. Guard on the derived
+  value, `rm -rf` on mismatch.
+
+compiler-rt specifics: enter at `compiler-rt/lib/builtins` (standalone project,
+skips `load_llvm_config()`); `LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON` plus
+`LLVM_DEFAULT_TARGET_TRIPLE` give the `lib/<triple>/` layout the driver searches.
 
 ## Changing scripts
 
@@ -106,3 +134,11 @@ are the failure mode here: the scripts are mostly preconditions.
 - **Plan docs can carry stale upstream facts.** `docs/plans/llvm-m2.md` originally warned
   of a `Triple::Minix` parse collision that no longer exists at the pinned LLVM. Verify
   such claims against the actual checkout before implementing.
+- **FileCheck `-NOT` only scans the gaps *between* positive matches.** Text a positive
+  pattern consumed is never examined — and a wildcard like `{{[^"]*}}` will happily
+  swallow the exact spelling you are excluding. Put whole-output negatives in their own
+  FileCheck run with no positive directive, or use `--implicit-check-not`.
+- **A new test that passes on its first run has not been verified.** Break the *source*
+  to prove a check is load-bearing; breaking only the test proves it is merely
+  evaluated. Choose the control token carefully — one that a positive check already
+  consumed reports a false green.

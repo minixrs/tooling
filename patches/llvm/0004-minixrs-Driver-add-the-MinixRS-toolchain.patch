@@ -1,0 +1,380 @@
+From 0a0281f3c4470365999607aa76342eebf06551d5 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Sun, 26 Jul 2026 02:41:54 -0500
+Subject: [PATCH 4/5] [minixrs] Driver: add the MinixRS toolchain
+
+Give aarch64-unknown-minixrs a real toolchain instead of letting it fall
+through to Generic_ELF, which drove /usr/bin/gcc as the linker.
+
+Shaped after Fuchsia -- derives from ToolChain directly, so none of the
+GCC-detection machinery in Generic_ELF applies. Behaviour is fixed by the
+tooling repo's docs/sysroot-layout.md, not invented here:
+
+  - ld.lld is the linker (getDefaultLinker, and the driver dir is on the
+    program paths, so the SDK's own lld is found).
+  - -static unconditionally. The platform has no shared objects and no
+    dynamic linker, so there is no -shared/-pie path to select between.
+  - -z max-page-size=4096 -z separate-loadable-segments, which is what the
+    minixrs loader requires of every PT_LOAD (D13).
+  - crt1.o/crti.o ... crtn.o and -L out of <sysroot>/usr/lib, headers out
+    of <sysroot>/usr/include.
+  - compiler-rt builtins; libc++ if C++ ever arrives; no sanitizers.
+
+The sysroot is computed relative to the driver binary (<driver dir>/../
+sysroot) rather than baked in via DEFAULT_SYSROOT, because only the
+$MINIXRS_SDK prefix is contractual and the SDK has to stay relocatable.
+The dots are folded out so the crt and -L paths that reach the link line
+are canonical sysroot paths.
+
+tooling/verify/check-driver.sh now passes all three steps (its crt/sysroot
+assertions still SKIP -- the sysroot itself arrives in P3).
+---
+ clang/lib/Driver/CMakeLists.txt         |   1 +
+ clang/lib/Driver/Driver.cpp             |   4 +
+ clang/lib/Driver/ToolChains/MinixRS.cpp | 201 ++++++++++++++++++++++++
+ clang/lib/Driver/ToolChains/MinixRS.h   |  91 +++++++++++
+ 4 files changed, 297 insertions(+)
+ create mode 100644 clang/lib/Driver/ToolChains/MinixRS.cpp
+ create mode 100644 clang/lib/Driver/ToolChains/MinixRS.h
+
+diff --git a/clang/lib/Driver/CMakeLists.txt b/clang/lib/Driver/CMakeLists.txt
+index 0026ba899171..534c507b521f 100644
+--- a/clang/lib/Driver/CMakeLists.txt
++++ b/clang/lib/Driver/CMakeLists.txt
+@@ -70,6 +70,7 @@ add_clang_library(clangDriver
+   ToolChains/Managarm.cpp
+   ToolChains/MipsLinux.cpp
+   ToolChains/MinGW.cpp
++  ToolChains/MinixRS.cpp
+   ToolChains/MSP430.cpp
+   ToolChains/MSVC.cpp
+   ToolChains/NetBSD.cpp
+diff --git a/clang/lib/Driver/Driver.cpp b/clang/lib/Driver/Driver.cpp
+index eb3f9cbea284..7e80f81ce1f5 100644
+--- a/clang/lib/Driver/Driver.cpp
++++ b/clang/lib/Driver/Driver.cpp
+@@ -36,6 +36,7 @@
+ #include "ToolChains/MSVC.h"
+ #include "ToolChains/Managarm.h"
+ #include "ToolChains/MinGW.h"
++#include "ToolChains/MinixRS.h"
+ #include "ToolChains/MipsLinux.h"
+ #include "ToolChains/NetBSD.h"
+ #include "ToolChains/OHOS.h"
+@@ -6883,6 +6884,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
+     case llvm::Triple::Managarm:
+       TC = std::make_unique<toolchains::Managarm>(*this, Target, Args);
+       break;
++    case llvm::Triple::MinixRS:
++      TC = std::make_unique<toolchains::MinixRS>(*this, Target, Args);
++      break;
+     case llvm::Triple::Solaris:
+       TC = std::make_unique<toolchains::Solaris>(*this, Target, Args);
+       break;
+diff --git a/clang/lib/Driver/ToolChains/MinixRS.cpp b/clang/lib/Driver/ToolChains/MinixRS.cpp
+new file mode 100644
+index 000000000000..b4dcfac6c661
+--- /dev/null
++++ b/clang/lib/Driver/ToolChains/MinixRS.cpp
+@@ -0,0 +1,201 @@
++//===--- MinixRS.cpp - minixrs ToolChain Implementation ---------*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#include "MinixRS.h"
++#include "clang/Driver/CommonArgs.h"
++#include "clang/Driver/Compilation.h"
++#include "clang/Driver/Driver.h"
++#include "clang/Options/Options.h"
++#include "llvm/Option/ArgList.h"
++#include "llvm/Support/Path.h"
++
++using namespace clang::driver;
++using namespace clang::driver::toolchains;
++using namespace clang::driver::tools;
++using namespace clang;
++using namespace llvm::opt;
++
++void minixrs::Linker::ConstructJob(Compilation &C, const JobAction &JA,
++                                   const InputInfo &Output,
++                                   const InputInfoList &Inputs,
++                                   const ArgList &Args,
++                                   const char *LinkingOutput) const {
++  const auto &ToolChain = static_cast<const MinixRS &>(getToolChain());
++  const Driver &D = ToolChain.getDriver();
++
++  ArgStringList CmdArgs;
++
++  // Silence warning for "clang -g foo.o -o foo"
++  Args.ClaimAllArgs(options::OPT_g_Group);
++  // and "clang -emit-llvm foo.o -o foo"
++  Args.ClaimAllArgs(options::OPT_emit_llvm);
++  // and for "clang -w foo.o -o foo". Other warning options are already
++  // handled somewhere else.
++  Args.ClaimAllArgs(options::OPT_w);
++  // -shared asks for an output kind the platform does not have: no shared
++  // objects, no dynamic linker (docs/sysroot-layout.md). Ignoring it would
++  // hand back a static executable under a .so name, so it is an error and not
++  // an unused-argument warning.
++  if (const Arg *A = Args.getLastArg(options::OPT_shared))
++    D.Diag(diag::err_drv_unsupported_opt_for_target)
++        << A->getSpelling() << ToolChain.getTripleString();
++
++  // -pie, -no-pie and -rdynamic name properties of an executable that this
++  // platform pins rather than a different output kind, so accept and ignore
++  // them: build systems pass them unconditionally, and the artifact is the one
++  // minixrs wants either way.
++  Args.ClaimAllArgs(options::OPT_pie);
++  Args.ClaimAllArgs(options::OPT_no_pie);
++  Args.ClaimAllArgs(options::OPT_rdynamic);
++
++  if (!D.SysRoot.empty())
++    CmdArgs.push_back(Args.MakeArgString("--sysroot=" + D.SysRoot));
++
++  // Static-only platform: no .so, no dynamic linker, no syslibdir. -static is
++  // unconditional rather than a default, so it holds even when the user passes
++  // options that would otherwise imply dynamic linking.
++  CmdArgs.push_back("-static");
++
++  // minixrs D13: the kernel's loader requires every PT_LOAD to be page aligned
++  // in both vaddr and file offset, at a 4 KiB page.
++  CmdArgs.push_back("-z");
++  CmdArgs.push_back("max-page-size=4096");
++  CmdArgs.push_back("-z");
++  CmdArgs.push_back("separate-loadable-segments");
++
++  CmdArgs.push_back("--eh-frame-hdr");
++
++  if (Args.hasArg(options::OPT_s))
++    CmdArgs.push_back("-s");
++
++  assert((Output.isFilename() || Output.isNothing()) && "Invalid output.");
++  if (Output.isFilename()) {
++    CmdArgs.push_back("-o");
++    CmdArgs.push_back(Output.getFilename());
++  }
++
++  // crt1.o is the C-side brand emitter (tooling/docs/abi-note.md); it has to
++  // come from the sysroot, not from a host toolchain.
++  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles,
++                   options::OPT_r)) {
++    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt1.o")));
++    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
++  }
++
++  Args.addAllArgs(CmdArgs, {options::OPT_L, options::OPT_u,
++                            options::OPT_T_Group, options::OPT_t});
++  ToolChain.AddFilePathLibArgs(Args, CmdArgs);
++
++  if (D.isUsingLTO())
++    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs,
++                  D.getLTOMode() == LTOK_Thin);
++
++  addLinkerCompressDebugSectionsOption(ToolChain, Args, CmdArgs);
++  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
++
++  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs,
++                   options::OPT_r)) {
++    if (D.CCCIsCXX() && ToolChain.ShouldLinkCXXStdlib(Args)) {
++      ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
++      CmdArgs.push_back("-lm");
++    }
++    // Silence warnings when linking C code with a C++ '-stdlib' argument.
++    Args.ClaimAllArgs(options::OPT_stdlib_EQ);
++
++    ToolChain.addProfileRTLibs(Args, CmdArgs);
++    AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
++
++    // musl is a single library: -lpthread, -lm and friends have no separate
++    // implementation, so libc is the whole C runtime.
++    if (!Args.hasArg(options::OPT_nolibc))
++      CmdArgs.push_back("-lc");
++  }
++
++  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles,
++                   options::OPT_r))
++    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crtn.o")));
++
++  const char *Exec = Args.MakeArgString(ToolChain.GetLinkerPath());
++  C.addCommand(std::make_unique<Command>(JA, *this,
++                                         ResponseFileSupport::AtFileCurCP(),
++                                         Exec, CmdArgs, Inputs, Output));
++}
++
++MinixRS::MinixRS(const Driver &D, const llvm::Triple &Triple,
++                 const ArgList &Args)
++    : ToolChain(D, Triple, Args) {
++  // ld.lld is installed alongside clang in $MINIXRS_SDK/bin.
++  getProgramPaths().push_back(getDriver().Dir);
++
++  SmallString<128> P(computeSysRoot());
++  llvm::sys::path::append(P, "usr", "lib");
++  getFilePaths().push_back(std::string(P));
++}
++
++std::string MinixRS::computeSysRoot() const {
++  const Driver &D = getDriver();
++  if (!D.SysRoot.empty())
++    return D.SysRoot;
++
++  // The SDK is relocatable — only $MINIXRS_SDK is contractual, and nothing may
++  // hard-code it (tooling/docs/sysroot-layout.md). clang lives in
++  // $MINIXRS_SDK/bin and the sysroot in $MINIXRS_SDK/sysroot, so derive one
++  // from the other instead of baking in a configure-time DEFAULT_SYSROOT. The
++  // dots are folded out so the crt and -L paths that reach the link line are
++  // the canonical sysroot paths rather than "bin/../sysroot".
++  SmallString<128> P(D.Dir);
++  llvm::sys::path::append(P, "..", "sysroot");
++  llvm::sys::path::remove_dots(P, /*remove_dot_dot=*/true);
++  return std::string(P);
++}
++
++Tool *MinixRS::buildLinker() const { return new tools::minixrs::Linker(*this); }
++
++ToolChain::RuntimeLibType
++MinixRS::GetRuntimeLibType(const ArgList &Args) const {
++  if (Arg *A = Args.getLastArg(options::OPT_rtlib_EQ)) {
++    StringRef Value = A->getValue();
++    if (Value != "compiler-rt")
++      getDriver().Diag(clang::diag::err_drv_invalid_rtlib_name)
++          << A->getAsString(Args);
++  }
++
++  return ToolChain::RLT_CompilerRT;
++}
++
++ToolChain::CXXStdlibType MinixRS::GetCXXStdlibType(const ArgList &Args) const {
++  if (Arg *A = Args.getLastArg(options::OPT_stdlib_EQ)) {
++    StringRef Value = A->getValue();
++    if (Value != "libc++")
++      getDriver().Diag(diag::err_drv_invalid_stdlib_name)
++          << A->getAsString(Args);
++  }
++
++  return ToolChain::CST_Libcxx;
++}
++
++void MinixRS::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
++                                        ArgStringList &CC1Args) const {
++  const Driver &D = getDriver();
++
++  if (DriverArgs.hasArg(options::OPT_nostdinc))
++    return;
++
++  if (!DriverArgs.hasArg(options::OPT_nobuiltininc)) {
++    SmallString<128> ResourceInc(D.ResourceDir);
++    llvm::sys::path::append(ResourceInc, "include");
++    addSystemInclude(DriverArgs, CC1Args, ResourceInc);
++  }
++
++  if (DriverArgs.hasArg(options::OPT_nostdlibinc))
++    return;
++
++  SmallString<128> SysInc(computeSysRoot());
++  llvm::sys::path::append(SysInc, "usr", "include");
++  addExternCSystemInclude(DriverArgs, CC1Args, SysInc.str());
++}
+diff --git a/clang/lib/Driver/ToolChains/MinixRS.h b/clang/lib/Driver/ToolChains/MinixRS.h
+new file mode 100644
+index 000000000000..6d43284cc47d
+--- /dev/null
++++ b/clang/lib/Driver/ToolChains/MinixRS.h
+@@ -0,0 +1,91 @@
++//===--- MinixRS.h - minixrs ToolChain Implementation -----------*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_MINIXRS_H
++#define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_MINIXRS_H
++
++#include "clang/Driver/Tool.h"
++#include "clang/Driver/ToolChain.h"
++
++namespace clang {
++namespace driver {
++namespace tools {
++namespace minixrs {
++class LLVM_LIBRARY_VISIBILITY Linker final : public Tool {
++public:
++  Linker(const ToolChain &TC) : Tool("minixrs::Linker", "ld.lld", TC) {}
++
++  bool hasIntegratedCPP() const override { return false; }
++  bool isLinkJob() const override { return true; }
++
++  void ConstructJob(Compilation &C, const JobAction &JA,
++                    const InputInfo &Output, const InputInfoList &Inputs,
++                    const llvm::opt::ArgList &TCArgs,
++                    const char *LinkingOutput) const override;
++};
++} // end namespace minixrs
++} // end namespace tools
++
++namespace toolchains {
++
++/// minixrs — a static-only ELF platform served by an SDK laid out per the
++/// tooling repo's docs/sysroot-layout.md: clang and ld.lld in
++/// $MINIXRS_SDK/bin, headers and libraries under $MINIXRS_SDK/sysroot/usr.
++/// There are no shared objects, no dynamic linker, and no sanitizer runtimes.
++class LLVM_LIBRARY_VISIBILITY MinixRS : public ToolChain {
++public:
++  MinixRS(const Driver &D, const llvm::Triple &Triple,
++          const llvm::opt::ArgList &Args);
++
++  bool HasNativeLLVMSupport() const override { return true; }
++
++  // Static, non-PIE executables only.
++  bool isPICDefault() const override { return false; }
++  bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
++    return false;
++  }
++  bool isPICDefaultForced() const override { return false; }
++
++  RuntimeLibType GetDefaultRuntimeLibType() const override {
++    return ToolChain::RLT_CompilerRT;
++  }
++  // libc++ or nothing — libstdc++ is never an option here. No libc++ is built
++  // for minixrs yet, so there is deliberately no AddClangCXXStdlibIncludeArgs
++  // override: it would have nothing to point at. Add one (Fuchsia.cpp is the
++  // crib) when a C++ standard library lands in the sysroot.
++  CXXStdlibType GetDefaultCXXStdlibType() const override {
++    return ToolChain::CST_Libcxx;
++  }
++  RuntimeLibType
++  GetRuntimeLibType(const llvm::opt::ArgList &Args) const override;
++  CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
++
++  // No sanitizer runtimes are built for this target.
++  SanitizerMask getSupportedSanitizers() const override {
++    return SanitizerMask();
++  }
++
++  void
++  AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
++                            llvm::opt::ArgStringList &CC1Args) const override;
++
++  const char *getDefaultLinker() const override { return "ld.lld"; }
++
++  /// --sysroot if given, otherwise $MINIXRS_SDK/sysroot derived from the
++  /// driver's own location.
++  std::string computeSysRoot() const override;
++
++protected:
++  Tool *buildLinker() const override;
++};
++
++} // end namespace toolchains
++} // end namespace driver
++} // end namespace clang
++
++#endif // LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_MINIXRS_H
+-- 
+2.50.1 (Apple Git-155)
+

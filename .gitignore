@@ -1,1 +1,4 @@
 .DS_Store
+
+# Personal, machine-specific Claude notes — CLAUDE.md is the shared one
+.claude.local.md

@@ -1,3 +1,8 @@
+# shellcheck shell=bash
+# (No shebang: this file is sourced, never executed. The directive above names
+# the dialect to lint as, which cannot otherwise be inferred. Careful — any
+# comment starting with the word "shellcheck" is parsed as a directive.)
+#
 # minixrs SDK environment. Source from a shell or script:
 #   . scripts/env.sh
 #

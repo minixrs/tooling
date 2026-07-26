@@ -17,6 +17,13 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
+**Status: `◀ next` — not started.** Zero commits exist beyond
+`llvmorg-22.1.8`, so `tooling/patches/llvm/` is correctly empty; it fills
+only at Step 6. Markers follow `tooling/docs/roadmap.md`: `◀ next`
+(unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N, merged
+YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in the
+roadmap's phase graph when the whole series ships.
+
 ## Preconditions
 
 - Branch `minixrs/release/22.x`, based on tag **`llvmorg-22.1.8`**
@@ -32,7 +39,7 @@ patch series.
 
 ---
 
-## Step 1 — the triple
+## Step 1 — the triple ◀ next
 
 `llvm/include/llvm/TargetParser/Triple.h`, in `enum OSType`:
 
@@ -86,7 +93,7 @@ Expect the build to point at a few exhaustive `switch (OS)` statements that
 now need a `MinixRS` case; add them as the compiler finds them rather than
 hunting up front.
 
-## Step 2 — triple tests
+## Step 2 — triple tests — unstarted
 
 `llvm/unittests/TargetParser/TripleTest.cpp`:
 
@@ -109,7 +116,7 @@ ninja TargetParserTests && ./unittests/TargetParser/TargetParserTests \
     --gtest_filter='TripleTest.*'
 ```
 
-## Step 3 — preprocessor target
+## Step 3 — preprocessor target — unstarted
 
 `clang/lib/Basic/Targets/OSTargets.h`, modeled on `FuchsiaTargetInfo` (same
 file), which is the closest shape: a small static-first ELF OS with no
@@ -153,7 +160,7 @@ ninja clang && ./bin/clang --target=aarch64-unknown-minixrs -dM -E -x c /dev/nul
     | grep -E '__minixrs__|__unix__|__ELF__'
 ```
 
-## Step 4 — driver toolchain
+## Step 4 — driver toolchain — unstarted
 
 New `clang/lib/Driver/ToolChains/MinixRS.{h,cpp}`, Fuchsia/NetBSD-shaped.
 Register it in:
@@ -200,7 +207,7 @@ Since clang installs to `$MINIXRS_SDK/bin` and the sysroot is
 hard-code this path" rule without a configure-time `DEFAULT_SYSROOT` — the
 SDK stays relocatable.
 
-## Step 5 — driver test
+## Step 5 — driver test — unstarted
 
 `clang/test/Driver/minixrs.c`, FileCheck'ing the `-###` line for the linker
 name, `-static`, both `-z` pairs, and the crt/`-L` paths, plus
@@ -211,7 +218,7 @@ Tests that assert sysroot-relative paths need a fixture sysroot under
 `clang/test/Driver/Inputs/` and an explicit `--sysroot=` — do not let the
 test depend on a real `$MINIXRS_SDK`.
 
-## Step 6 — wrap-up
+## Step 6 — wrap-up — unstarted
 
 From the build dir:
 

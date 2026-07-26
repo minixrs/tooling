@@ -29,21 +29,47 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 - Cross-repo rule: minixrs/fork changes are planned here but implemented in
   separate sessions inside those repos.
 
+## Status markers
+
+Same convention as the minixrs repo (`docs/plan.md` / `docs/plans/*`), so the
+two trackers read alike:
+
+- `◀ next` — unstarted, and the thing to pick up next (only one at a time)
+- `◀ ready (branch …, pending merge)` — implemented but unmerged
+- `✓ shipped (PR #N, merged YYYY-MM-DD)` — merged
+
+This repo does not run a PR workflow yet — changes land directly on `main`,
+so its own entries use `✓ shipped (commit <sha>, YYYY-MM-DD)`. Switch to the
+`PR #N` form once formal review is in place. Items owned by another repo keep
+that repo's form (M1 shipped as minixrs PR #44).
+
+Flip the previous item forward and slide `◀ next` ahead as part of each
+change, in **both** the phase graph below and the matching `plans/` detail
+file. Reconcile stale `◀ ready` markers against `git log` when opening new
+work — "pending merge" labels on already-merged work accumulate otherwise.
+
 ## Phase graph
 
 ```
-P0 tooling bootstrap (done — this repo)                    — no deps
-P1 [minixrs] M1: triple JSON + build-std + notes + kernel  — needs P0 spec; land after slice 5.3
-P2 [llvm-minixrs] M2: patched clang/lld/compiler-rt SDK    — independent; can run parallel to P1
-P3 [musl-minixrs + tooling] M3: real-triple sysroot, C hello — tooling half needs P2; OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
-P4 [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link — needs P3 + slice 5.6 ABI freeze
-P5 upstreaming: LLVM triple + rustc tier-3 (optional)      — needs M2–M5 stability
+P0  tooling bootstrap (this repo)                            ✓ shipped (commit afbdc66, 2026-07-25)
+P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
+P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
+P2b [llvm-minixrs] M2: the patch series — triple + driver    ◀ next
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   — tooling half needs P2b; OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
+P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 + slice 5.6 ABI freeze
+P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
 ```
+
+**P2 is split into P2a/P2b deliberately.** The bring-up half (volume, fork,
+tooling, baseline build) and the patch half land in different repos in
+different sessions, and only the patch half closes the M2 gate. Marking "P2"
+as one unit made an empty `patches/llvm/` look like a bug rather than the
+expected state.
 
 North star (deliberately **not** sequenced): self-hosted compilers on minixrs.
 Blockers: threads, mmap, big stacks, FS scale.
 
-## P0 — tooling bootstrap (this repo)
+## P0 — tooling bootstrap (this repo) ✓ shipped (commit afbdc66, 2026-07-25)
 
 Repo skeleton, normative PT_NOTE spec, roadmap, sysroot layout contract, the
 M1 companion plan, guarded build scripts, cmake toolchain file, and the brand
@@ -51,9 +77,10 @@ verifier with fixture selftests. **Done** when `verify/selftest.sh` passes and
 `verify/check-brand.sh` correctly reports a current (unbranded) minixrs server
 ELF as missing the brand.
 
-## P1 — M1: the triple exists (minixrs repo)
+## P1 — M1: the triple exists (minixrs repo) ✓ shipped (PR #44, merged 2026-07-25)
 
-Full plan: [plans/minixrs-m1.md](plans/minixrs-m1.md). Summary:
+Executed in `~/src/minixrs`; that repo's `docs/plan.md` is authoritative for
+its status. Full plan: [plans/minixrs-m1.md](plans/minixrs-m1.md). Summary:
 
 - `tools/targets/aarch64-unknown-minixrs.json` mirrors the pinned nightly's
   `aarch64-unknown-none` spec, changing only `"os": "minixrs"`; `llvm-target`
@@ -74,7 +101,23 @@ pack assertion active; CI green.
 
 ## P2 — M2: the toolchain exists (llvm-minixrs)
 
-Full patch plan: [plans/llvm-m2.md](plans/llvm-m2.md).
+Two halves, tracked separately because they land in different repos:
+
+### P2a — fork bring-up (this repo) ✓ shipped (commit bd49a45, 2026-07-25)
+
+`scripts/forks-volume.sh` + the case-sensitive volume, the
+`$MINIXRS_FORKS_DIR` layout contract in `env.sh`, `build-llvm.sh` hardening,
+`verify/check-driver.sh`, and one unpatched `build-llvm.sh --baseline` that
+proved the volume, CMake 4.3, Xcode 26.6, and the `$MINIXRS_SDK` install
+layout before any patch was in flight.
+
+### P2b — the LLVM patch series (llvm-minixrs) ◀ next
+
+Full patch plan: [plans/llvm-m2.md](plans/llvm-m2.md). Execute in
+`$MINIXRS_FORKS_DIR/llvm-minixrs`; no LLVM source is edited from this repo
+(cross-repo rule). **`patches/llvm/` stays empty until this ships** — it is
+`git format-patch` output, and the fork currently sits exactly on the pinned
+tag with zero commits ahead.
 
 Repo **`minixrs/llvm-minixrs`** (a GitHub fork of `llvm/llvm-project` under
 the org — shares object storage upstream, so creating it costs no upload).
@@ -109,13 +152,15 @@ Built by `scripts/build-llvm.sh` (clang;lld, AArch64 only,
 
 **M2 gate**: driver test passes; `clang --target=aarch64-unknown-minixrs`
 defines `__minixrs__` and links a branded static ELF — scripted as
-`verify/check-driver.sh`.
+`verify/check-driver.sh`. Two commands tell you where M2 actually stands,
+without trusting any marker:
 
-Bring-up ran one unpatched `build-llvm.sh --baseline` first, so that the
-volume, CMake, host toolchain, and `$MINIXRS_SDK` install layout were all
-proven before any patch was in flight.
+```sh
+verify/check-driver.sh      # P2b done → exits 0; today → fails at step 1
+ls patches/llvm/*.patch     # P2b done → ~4-5 files; today → none
+```
 
-## P3 — M3: the sysroot exists (musl-minixrs + tooling)
+## P3 — M3: the sysroot exists (musl-minixrs + tooling) — blocked on P2b + slice 5.6
 
 Ownership split:
 
@@ -134,7 +179,7 @@ Ownership split:
 (≈ minixrs milestone A); M3b = via slice 5.9 exec-from-FS. The tooling half
 can be fully ready before the OS half.
 
-## P4 — M4/M5: Rust std (libc-minixrs + rust-minixrs)
+## P4 — M4/M5: Rust std (libc-minixrs + rust-minixrs) — blocked on P3 + slice 5.6 ABI freeze
 
 Start only after the slice 5.6 ABI freeze. Order:
 
@@ -158,7 +203,7 @@ Start only after the slice 5.6 ABI freeze. Order:
 with no JSON and no build-std — then delete the JSON + check-cfg shims from
 minixrs.
 
-## P5 — upstreaming (optional)
+## P5 — upstreaming (optional) — blocked on M2–M5 stability
 
 Upstream the LLVM triple, then propose rustc tier-3. Needs M2–M5 stability
 and a public story for the OS. No schedule.

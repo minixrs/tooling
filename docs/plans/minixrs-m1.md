@@ -16,6 +16,13 @@ and the kernel refuses to load an ELF without it. The **kernel stays on
 **Gate**: QEMU boot green (`tools/check-boot-log.sh`) with all 9 branded;
 kernel rejects unbranded; pack-time assertion active; CI green.
 
+**Status: ✓ shipped (PR #44, merged 2026-07-25).** Executed in `~/src/minixrs`
+— **that repo's `docs/plan.md` is authoritative**; this line is a convenience
+mirror, so trust it only as far as its date. As of writing, minixrs'
+`docs/plan.md` still carries the pre-merge `◀ ready (branch
+feature/m1-minixrs-target-brand, pending merge)` label for M1 and wants
+reconciling against `git log` there.
+
 ## Preconditions
 
 - Land after phase-5 slice 5.3 (in progress at planning time).

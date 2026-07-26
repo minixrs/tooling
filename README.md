@@ -99,7 +99,15 @@ Against an unpatched (`--baseline`) clang it correctly fails at step 1 with
 
 ## Roadmap
 
-See [docs/roadmap.md](docs/roadmap.md). Current milestone: **M1** — custom
-target JSON + `-Zbuild-std`, all 9 minixrs user binaries branded and the
-kernel rejecting unbranded ELFs. M1 is executed in the minixrs repo, driven by
-[docs/plans/minixrs-m1.md](docs/plans/minixrs-m1.md).
+See [docs/roadmap.md](docs/roadmap.md), which tracks phase status with the
+same `◀ next` / `◀ ready` / `✓ shipped` markers the minixrs repo uses.
+
+| Phase | Status |
+|---|---|
+| P0 tooling bootstrap | ✓ shipped |
+| P1 / M1 triple + branding (minixrs repo) | ✓ shipped (PR #44) |
+| P2a llvm fork bring-up | ✓ shipped |
+| **P2b / M2 LLVM patch series** | **◀ next** — [docs/plans/llvm-m2.md](docs/plans/llvm-m2.md) |
+| P3 / M3 sysroot | blocked on P2b + minixrs slice 5.6 |
+
+`patches/llvm/` is `git format-patch` output and stays empty until P2b ships.

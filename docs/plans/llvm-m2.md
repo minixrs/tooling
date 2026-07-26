@@ -20,7 +20,7 @@ carries the identity note.
 **Status: Steps 1–5 ready on `minixrs/release/22.x`; Step 6 is next.** The
 triple, its unit tests, the preprocessor target, the driver toolchain and its
 lit test are committed (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`,
-`0a0281f3c447`, `52397b468b7a`), so **`check-driver.sh` is green end to end**
+`0a0281f3c447`, `3cc1fda07298`), so **`check-driver.sh` is green end to end**
 — it still SKIPs its crt/sysroot assertions, which need the P3 sysroot — and
 `check-clang-driver` is clean at 1403 tests. What is left is the wrap-up:
 `tooling/patches/llvm/` stays empty until Step 6 exports the series. Markers
@@ -317,19 +317,53 @@ sysroot and the answers to flags the platform cannot honour (`-shared` errors;
 the behaviour Step 4 introduced deserves a regression test, not just a
 paragraph.
 
-**On `CHECK-NOT` placement.** The default-sysroot `CHECK-NOT: bin/..` sits
-*before* its positive `-L` check, not after. `CHECK-NOT` scans the region
-between the surrounding positive matches, and an unfolded `bin/../sysroot`
-spelling appears *earlier* in the line than the `-L…/sysroot/usr/lib` anchor
-— so a trailing `-NOT` would scan past the very text it exists to catch and
-pass regardless. This was found by mutation-testing, not by reading.
+**Deliberately not covered.** The `-nostdlib` / `-nostartfiles` /
+`-nodefaultlibs` / `-nolibc` suppression paths in `ConstructJob` have no
+assertions. They are ordinary upstream-shaped guards rather than minixrs
+policy, and nothing in M2's gate depends on them; fold them in when something
+actually consumes them (P4's libc build is the likely first caller).
 
-**Verify the test, not just the code.** Every directive was checked by
-mutating it and confirming the test fails: crt names, page size, `-static`
-versus `-Bstatic`, each define, the builtins path, `-lc`, and each `-NOT`
-against a control string chosen to fall inside that directive's own scan
-region. Twelve mutations, twelve failures, and the unmutated file passes. A
-green new test proves nothing on its own.
+**A `-NOT` never sees what a positive match ate.** FileCheck tests a `-NOT`
+only in the gaps *between* the positive matches that surround it. That one
+rule shapes three decisions in this test, and it is the easiest way to write
+an assertion that cannot fail:
+
+- The no-dots check gets **its own FileCheck run with no positive directive**,
+  which makes its scan region the whole output. It cannot live in the
+  default-sysroot run, because that run's `-L{{[^"]*}}/sysroot/usr/lib`
+  pattern spells the middle of the path as a wildcard — so it *also matches*,
+  and therefore consumes, the unfolded `-L…/bin/../sysroot/usr/lib` the `-NOT`
+  is there to reject.
+- The happy-path negatives (`-dynamic-linker`, `-shared`, `-pie`) are
+  `--implicit-check-not` on the RUN line rather than inline `CHECK-NOT`s,
+  which would have scanned only the few tokens between the second `-z` pair
+  and `crt1.o`.
+- The claimed-flag run is anchored on `ld.lld` and `-static` **before** its
+  negatives. A run of bare `-NOT`s also passes on empty output, or on a driver
+  that died before emitting a link line.
+
+**Verify the test, not just the code — and pick the control carefully.**
+Test-side mutation (breaking a directive and confirming the test fails) proves
+a directive is *evaluated*; only source-side mutation proves it is *load
+bearing*. Both were run: deleting `remove_dots` from `MinixRS.cpp` and
+dropping `ClaimAllArgs(OPT_pie)` each fail the test, and every directive was
+also broken in turn. Two traps, both hit for real here:
+
+- A control that lands in a *different* scan region proves nothing. The first
+  no-dots control did this, which is how the arrangement above survived a
+  round of review.
+- A control token that a positive check consumes proves nothing either.
+  Probing the `--implicit-check-not`s with `-static` reported three false
+  greens, because `CHECK-SAME: "-static"` had already eaten it; re-probing
+  with `--eh-frame-hdr`, which no positive check claims, failed all three as
+  required.
+
+Under the previous arrangement the `remove_dots` mutation *was* caught, but
+only incidentally: `AddClangSystemIncludeArgs` emits an unfolded
+`-internal-externc-isystem` path on the cc1 line, ahead of the `-L` anchor.
+Adding `-nostdlibinc` removed that witness and the check went green with the
+bug present. An assertion resting on a witness it does not name is not an
+assertion.
 
 ```sh
 ninja check-clang-driver     # 1403 tests, 1320 passed, 82 unsupported, 1 XFAIL

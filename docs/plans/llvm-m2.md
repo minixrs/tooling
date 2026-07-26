@@ -17,12 +17,12 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: Steps 1–4 ready on `minixrs/release/22.x`; Step 5 is next.** The
-triple, its unit tests, the preprocessor target and the driver toolchain are
-committed (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`, `0a0281f3c447`),
-so **`check-driver.sh` is green end to end** — it still SKIPs its crt/sysroot
-assertions, which need the P3 sysroot. What is left is the lit test that
-pins the link line (Step 5) and the wrap-up (Step 6);
+**Status: Steps 1–5 ready on `minixrs/release/22.x`; Step 6 is next.** The
+triple, its unit tests, the preprocessor target, the driver toolchain and its
+lit test are committed (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`,
+`0a0281f3c447`, `52397b468b7a`), so **`check-driver.sh` is green end to end**
+— it still SKIPs its crt/sysroot assertions, which need the P3 sysroot — and
+`check-clang-driver` is clean at 1403 tests. What is left is the wrap-up:
 `tooling/patches/llvm/` stays empty until Step 6 exports the series. Markers
 follow `tooling/docs/roadmap.md`:
 `◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
@@ -293,7 +293,7 @@ ld.lld -static -z max-page-size=4096 -z separate-loadable-segments
 clang, including linking `verify/testdata/branded.s` and brand-checking the
 result. Its crt/sysroot assertions still SKIP — the sysroot arrives in P3.
 
-## Step 5 — driver test ◀ next
+## Step 5 — driver test ◀ ready (branch minixrs/release/22.x, pending merge)
 
 `clang/test/Driver/minixrs.c`, FileCheck'ing the `-###` line for the linker
 name, `-static`, both `-z` pairs, and the crt/`-L` paths, plus
@@ -304,7 +304,38 @@ Tests that assert sysroot-relative paths need a fixture sysroot under
 `clang/test/Driver/Inputs/` and an explicit `--sysroot=` — do not let the
 test depend on a real `$MINIXRS_SDK`.
 
-## Step 6 — wrap-up — unstarted
+**Fixture.** `Inputs/minixrs_tree/` holds both halves — `sysroot/usr/{lib,
+include}` with zero-byte `crt1.o`/`crti.o`/`crtn.o`/`libc.a`, and a
+`resource_dir/` carrying `lib/aarch64-unknown-minixrs/libclang_rt.builtins.a`.
+A new self-contained tree, rather than new entries in the shared
+`Inputs/resource_dir_with_per_target_subdir`, keeps the series all-new-files
+and cheap to rebase.
+
+Beyond the plan's list, the test also pins the driver-relative default
+sysroot and the answers to flags the platform cannot honour (`-shared` errors;
+`-pie`/`-no-pie`/`-rdynamic` are dropped silently; sanitizers are rejected) —
+the behaviour Step 4 introduced deserves a regression test, not just a
+paragraph.
+
+**On `CHECK-NOT` placement.** The default-sysroot `CHECK-NOT: bin/..` sits
+*before* its positive `-L` check, not after. `CHECK-NOT` scans the region
+between the surrounding positive matches, and an unfolded `bin/../sysroot`
+spelling appears *earlier* in the line than the `-L…/sysroot/usr/lib` anchor
+— so a trailing `-NOT` would scan past the very text it exists to catch and
+pass regardless. This was found by mutation-testing, not by reading.
+
+**Verify the test, not just the code.** Every directive was checked by
+mutating it and confirming the test fails: crt names, page size, `-static`
+versus `-Bstatic`, each define, the builtins path, `-lc`, and each `-NOT`
+against a control string chosen to fall inside that directive's own scan
+region. Twelve mutations, twelve failures, and the unmutated file passes. A
+green new test proves nothing on its own.
+
+```sh
+ninja check-clang-driver     # 1403 tests, 1320 passed, 82 unsupported, 1 XFAIL
+```
+
+## Step 6 — wrap-up ◀ next
 
 From the build dir:
 

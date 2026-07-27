@@ -32,8 +32,10 @@ work — "pending merge" labels on already-merged work accumulate otherwise.
 gate over trusting a marker:
 
 ```sh
-verify/selftest.sh          # brand verifier, needs no SDK — 3 fixtures
+verify/selftest.sh          # brand + image fixtures, needs no SDK — 7 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
+scripts/build-sysroot.sh --skip-musl   # the P3 gate (fails on the image base
+                            # until LLVM patch 0006 lands — that is correct)
 ls patches/llvm/*.patch     # 5 files since the P2b series was exported
 ```
 
@@ -80,6 +82,12 @@ Mount the forks volume first — every fork-consuming script fails fast without 
   build; raise it or the cache self-evicts to a ~0% hit rate.
 - `build-llvm.sh` reuses the same `build-minixrs` dir as a manual `ninja clang` but
   reconfigures — expect a broader rebuild than the incremental you were just running.
+- **musl builds *outside* its fork checkout**, unlike LLVM: minixrs pins
+  `musl-minixrs` as a submodule and its CI asserts a clean `git status`. Build dirs
+  live in `$MINIXRS_FORKS_DIR/build/`.
+- **The ABI headers come from minixrs, never vendored here**: `cargo gen-c-headers
+  [OUTDIR]` (package `minixrs-gen-c-headers`) emits `include/minixrs/*.h` plus the
+  `abi-selftest.c` that `build-sysroot.sh` compiles under `-nostdinc`.
 
 ### Cross-building runtimes (compiler-rt today; musl and rust next)
 
@@ -142,3 +150,17 @@ are the failure mode here: the scripts are mostly preconditions.
   to prove a check is load-bearing; breaking only the test proves it is merely
   evaluated. Choose the control token carefully — one that a positive check already
   consumed reports a false green.
+- **A sibling check can mask the one you disabled.** Break the whole rule, not one
+  clause: disabling only `check-image.sh`'s `p_vaddr` alignment test still printed
+  "not 4096-byte aligned" from the `p_offset` test — a false green for the sabotage.
+- **The Bash tool's shell is zsh.** `${PIPESTATUS[0]}` and `read -ra` fail or expand
+  to nothing *silently*; a probe loop using them reported four identical results that
+  were all the no-flags case. Wrap multi-step shell probes in `bash -c`.
+- **Bash arithmetic has no `_` digit separators.** Mirroring a minixrs constant like
+  `0x0020_0000` into shell must drop them, or `$(( ))` parses `_0000` as a variable
+  name (see `verify/check-image.sh`).
+- **`-z separate-loadable-segments` is what makes lld emit 4 KiB-aligned `PT_LOAD`s**,
+  not `-z max-page-size=4096`, which only sets the granularity — dropping max-page-size
+  alone still yields 64 KiB- (hence 4 KiB-) aligned segments. Without
+  separate-loadable-segments lld packs segments so only `p_offset ≡ p_vaddr (mod page)`
+  holds and *neither* is aligned.

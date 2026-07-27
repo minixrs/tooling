@@ -20,8 +20,18 @@ $MINIXRS_SDK/
 │   │               └── libclang_rt.builtins.a     build-compiler-rt.sh (M2)
 │   └── cmake/llvm/                        for compiler-rt & rustc configure
 ├── sysroot/                               installed by build-musl.sh (M3)
+│   ├── .stamp                             "musl=<sha> minixrs=<sha>
+│   │                                      clang=<version line>" — freshness
+│   │                                      key; minixrs' build.rs uses it as a
+│   │                                      rerun-if-changed target. minixrs is
+│   │                                      in the key because it is the ABI
+│   │                                      oracle (see below)
 │   └── usr/
-│       ├── include/                       musl headers (+ minixrs ABI headers)
+│       ├── include/                       musl headers
+│       │   └── minixrs/                   generated ABI headers (ipc.h,
+│       │                                  callnr.h, com.h, errno.h) copied in
+│       │                                  from minixrs' gen-c-headers, so C
+│       │                                  compiles against one -isystem root
 │       └── lib/
 │           ├── libc.a                     static only — no shared objects
 │           ├── crt1.o                     carries the brand note (abi-note.md)
@@ -50,9 +60,15 @@ $MINIXRS_SDK/
   (`lib/clang/<major>/lib/<triple>/`). The `22` component tracks the fork's
   major version; scripts derive it from `clang --print-resource-dir` rather
   than hard-coding.
-- **The sysroot is the ABI oracle.** `build-sysroot.sh` diffs the minixrs
-  gen-c-headers output against the installed headers (ABI selftest) and
-  brand-checks a freshly linked hello world before declaring the sysroot
-  good.
+- **The generated ABI headers are the oracle, and they come from minixrs.**
+  This repo never vendors a copy: `build-musl.sh` runs
+  `cargo gen-c-headers` in `$MINIXRS_SRC` and installs the result here, and
+  `build-sysroot.sh` compiles the `abi-selftest.c` that comes with it against
+  the installed headers under `-nostdinc` — so a POSIX errno that drifted from
+  `kernel-shared` is a build failure, not a runtime surprise.
+- **The sysroot is validated before it is trusted.** `build-sysroot.sh` links
+  a hello world from a bare driver line and runs both `check-brand.sh` and
+  `check-image.sh` on it; a failure of either means nothing is installed to
+  `share/minixrs/hello`.
 - Nothing in minixrs may hard-code this path; only `$MINIXRS_SDK` (with the
   `~/toolchains/minixrs` default) is contractual.

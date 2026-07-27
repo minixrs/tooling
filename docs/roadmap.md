@@ -24,8 +24,10 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 - minixrs pins `nightly-2026-07-23` (rustc 1.99.0-nightly, commit `6f72b5dd5`,
   **LLVM 22.1.8**) with `rust-src` + `llvm-tools` — so the LLVM fork targets
   `release/22.x` and the same patch series later serves rustc.
-- minixrs phase 5 (musl + FS) is in progress at slice 5.3. The ABI freeze
-  point is slice 5.6; exec-from-FS is slice 5.9.
+- minixrs phase 5 (musl + FS) is in progress at slice 5.7. Slice 5.6 shipped
+  2026-07-26 (minixrs PR #47), so **the ABI freeze is in effect**: `Message`
+  layout, call numbers, endpoints and errnos now change only via a deliberate
+  ABI-bump PR touching both repos. exec-from-FS is still slice 5.9.
 - Cross-repo rule: minixrs/fork changes are planned here but implemented in
   separate sessions inside those repos.
 
@@ -56,8 +58,8 @@ P0  tooling bootstrap (this repo)                            ✓ shipped (commit
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
 P2b [llvm-minixrs] M2: the patch series — triple + driver    ✓ shipped (PR #1, merged 2026-07-26)
-P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ◀ next — OS half needs slices 5.4/5.5/5.6 (5.9 for exec-from-FS)
-P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 + slice 5.6 ABI freeze
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ◀ next — tooling half ready (branch feature/p3-m3-sysroot); LLVM 0006 + minixrs consumption remain
+P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 (the slice 5.6 ABI freeze is now in effect)
 P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
 ```
 
@@ -162,28 +164,98 @@ verify/check-driver.sh      # exits 0 (crt/sysroot assertions SKIP until P3)
 ls patches/llvm/*.patch     # 5 files
 ```
 
-## P3 — M3: the sysroot exists (musl-minixrs + tooling) — blocked on P2b + slice 5.6
+## P3 — M3: the sysroot exists (musl-minixrs + tooling) — ◀ next
+
+Full plan: [plans/musl-m3.md](plans/musl-m3.md).
+
+**The OS half is done and the fork exists.** minixrs slice 5.6 (PR #47,
+2026-07-26) shipped the port and ran a branded C hello world on minixrs, so
+milestone A is reached — but **through the stand-in triple**
+(`aarch64-unknown-linux-musl` + stock clang), not the patched clang. Closing M3
+means reproducing that through the SDK on the real `aarch64-unknown-minixrs`
+triple. The port itself is not the remaining work; the toolchain flavor is.
+
+Three parts, in three repos:
+
+| Part | Status |
+|---|---|
+| **P3a** [tooling] the SDK sysroot: `build-musl.sh`, `build-sysroot.sh`, `verify/check-image.sh` | ◀ ready (branch `feature/p3-m3-sysroot`, pending merge) |
+| **P3b** [llvm-minixrs] patch 0006: pin the image base at `0x0010_0000` | ◀ next |
+| **P3c** [minixrs] `kernel/build.rs` consumes `$MINIXRS_SDK` | — needs P3b |
+
+P3a builds a sysroot that installs, passes the ABI selftest, and links a
+branded hello from a bare `clang --target=aarch64-unknown-minixrs hello.c -o
+hello`. The one thing still wrong is the image base, which is P3b's job — see
+below.
+
+The fork: `minixrs/musl-minixrs`, branch **`minixrs`** (the default; `main` is a
+pristine upstream mirror, never committed to), based on tag **v1.2.6**. Its
+whole delta is 7 files — `arch/aarch64/syscall_arch.h`,
+`src/thread/aarch64/syscall_cp.s`, `src/minixrs/{ipc.c,_syscall.c,
+minixrs_internal.h}`, `crt/crt1.c`'s brand block, and `MINIXRS.md`. Keeping it
+that small is the design goal: musl's ~297 `__syscall` call sites are untouched,
+which is what lets the other ~1900 files rebase for free. Read `MINIXRS.md`
+before touching it. (The old `KevinBarnard/musl-minix` at v1.2.5 is archived and
+nothing was carried over.)
 
 Ownership split:
 
-- minixrs keeps its CI-fallback `tools/build-musl.sh` (linux-musl-triple
-  workaround per phase-5 D10) until M3 stabilizes, then deletes it.
+- minixrs keeps its `tools/build-musl.sh` (linux-musl-triple workaround per
+  phase-5 D10) until M3 stabilizes, then deletes it. It is **not** a fallback —
+  as of 5.6 it is the blocking `qemu-smoke` job's real dependency.
 - tooling owns the SDK flavor: `scripts/build-musl.sh` builds musl-minixrs
   with the patched clang into `$MINIXRS_SDK/sysroot/usr/{include,lib}`;
   minixrs consumes via the `$MINIXRS_SDK` env var.
 - The crt1 brand rides in via the musl fork (see abi-note.md).
-- `scripts/build-sysroot.sh` runs the minixrs gen-c-headers ABI selftest
-  against the real sysroot and brand-checks a linked hello world, which it
-  installs at `$MINIXRS_SDK/share/minixrs/hello` as a canned test artifact
-  for minixrs sessions.
+- `scripts/build-sysroot.sh` compiles minixrs' generated `abi-selftest.c`
+  against the real sysroot (`-nostdinc`, POSIX errno block armed), then links
+  a hello world and runs both `verify/check-brand.sh` and
+  `verify/check-image.sh` on it before installing it at
+  `$MINIXRS_SDK/share/minixrs/hello` as a canned test artifact for minixrs
+  sessions. A hello that fails either check is not installed.
 
-**M3 gate**: branded C hello world exec'd on minixrs. M3a = boot-embedded
-(≈ minixrs milestone A); M3b = via slice 5.9 exec-from-FS. The tooling half
-can be fully ready before the OS half.
+**Inherited from slice 5.6** — each cost real debugging time there. Three of
+the four turned out **not** to recur in the SDK flavor; all four were checked
+against the installed SDK rather than assumed:
 
-## P4 — M4/M5: Rust std (libc-minixrs + rust-minixrs) — blocked on P3 + slice 5.6 ABI freeze
+- **`RANLIB` must be `llvm-ar s`** — the pinned nightly ships `llvm-ar` but no
+  `llvm-ranlib`. **Moot here:** the SDK ships `llvm-ranlib` (`LLVM_INSTALL_UTILS
+  =ON`). `build-musl.sh` uses it and guards on it.
+- **Quad-float builtins.** musl's `vfprintf` needs `__multf3`/`__floatsitf`/…
+  (aarch64 `long double` is IEEE quad) and configure finds no library for them.
+  minixrs sources them from `compiler_builtins` **as built by `-Zbuild-std`**.
+  **Already solved here:** `build-compiler-rt.sh` installs a builtins archive
+  that exports them, and the driver adds it automatically.
+- **The linker script must be complete** — an orphan section past the last
+  `PT_LOAD` is a silent load failure, and `__init_tls` dereferences `AT_PHDR`.
+  **No linker script here:** lld's default layout already satisfies the loader.
+  Only the image base needs pinning (P3b), because lld defaults to `0x200000`
+  and minixrs maps every process's stack page at `SERVER_STACK_VA =
+  0x0020_0000`. `verify/check-image.sh` is what turns that class of bug from a
+  QEMU hang into a one-second host check.
+- **The exec stack is one 4 KiB page.** Measured sufficient (~2 KB worst chain)
+  and deliberately not grown — but v1.2.6's `fmt_fp` allocates a **VLA**,
+  ~512 B for `%f` and **~7.4 KB for `%Lf`**, so the first C program printing a
+  `long double` overflows it. No static frame scan predicts that. **Still
+  live** — nothing in the SDK flavor changes it.
 
-Start only after the slice 5.6 ABI freeze. Order:
+**M3 gate**: branded C hello world exec'd on minixrs, built by the **patched
+clang on the real triple**. M3a = boot-embedded; M3b = via slice 5.9
+exec-from-FS. (minixrs milestone A already cleared the M3a *shape* on the
+stand-in triple — that is the reference to reproduce, not the gate itself.)
+
+Three commands tell you where P3 actually stands, without trusting a marker:
+
+```sh
+verify/selftest.sh                     # brand + image fixtures, no SDK needed
+verify/check-driver.sh                 # crt/sysroot assertions ACTIVE once P3a lands
+scripts/build-sysroot.sh --skip-musl   # green only once P3b lands
+```
+
+## P4 — M4/M5: Rust std (libc-minixrs + rust-minixrs) — blocked on P3
+
+The slice 5.6 ABI freeze this waited on is **in effect** as of 2026-07-26, so
+the only remaining gate is P3. Order:
 
 1. **libc-minixrs**: `src/unix/minixrs/` mirroring the musl-aarch64
    definitions, D7/D8 errno parity; extend minixrs gen-c-headers with a
@@ -224,4 +296,6 @@ and a public story for the OS. No schedule.
 | Forks volume unmounted at build time | scripts report a confusing "clone the fork first" | every fork-consuming script points at `scripts/forks-volume.sh mount` in its not-found message |
 | Sparsebundle outgrows the internal SSD (rust-minixrs at P4; local Time Machine snapshots pin deleted build bands) | builds fail on ENOSPC | move the bundle to the external SSD — only `MINIXRS_FORKS_BUNDLE` changes, no script edits |
 | exec-from-FS (slice 5.9) bypasses the pack assertion | unbranded binaries reachable | the runtime `load_exec_image()` check is the authoritative gate; mkfs gets the same shared kernel-shared scan |
+| An image larger than 1 MiB collides with the stack page at `0x0020_0000` — the image base is `0x0010_0000` and the gap is exactly 1 MiB | the process overwrites its own text at first push; no loader error | `verify/check-image.sh` catches it on the host, in a second, before QEMU. The OS-side fix (relocate the initial stack out of the low image region) is a later minixrs slice, not P3 |
+| The `check-image.sh` VA constants are copies of minixrs' | a VA-map change in minixrs silently invalidates the checker | each constant is annotated with its defining file in minixrs; re-check on any uspace change (`SERVER_STACK_VA`, `USER_DEVICE_WINDOW_BASE`, `USER_VA_TOP`) |
 | `env: ""` vs `"musl"` in the P4 target spec | crates.io cfg probes misfire | keep `env` empty; audit `cfg(target_env)` usage in early ports |

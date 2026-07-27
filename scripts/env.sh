@@ -35,6 +35,12 @@ export MINIXRS_SDK="${MINIXRS_SDK:-$HOME/toolchains/minixrs}"
 export MINIXRS_FORKS_DIR="${MINIXRS_FORKS_DIR:-$HOME/src/minixrs-forks}"
 export MINIXRS_SRC="${MINIXRS_SRC:-$(dirname "$_MINIXRS_REPO_ROOT")/minixrs}"
 
+# Where build-musl.sh writes minixrs' generated ABI headers and where
+# build-sysroot.sh looks for the abi-selftest.c they come with. A build
+# artifact, not part of the SDK — it lives here only because both scripts have
+# to agree on one path, and a default duplicated in two scripts drifts.
+export MINIXRS_GEN_C_HEADERS_DIR="${MINIXRS_GEN_C_HEADERS_DIR:-$MINIXRS_FORKS_DIR/build/gen-c-headers}"
+
 case ":$PATH:" in
     *":$MINIXRS_SDK/bin:"*) ;;
     *) export PATH="$MINIXRS_SDK/bin:$PATH" ;;

@@ -11,7 +11,8 @@
 #                       reports; the fork branches from the tag, not the
 #                       moving release/22.x head, so the exported series is
 #                       reproducible)
-#   MINIXRS_MUSL_BASE   default v1.2.5
+#   MINIXRS_MUSL_BASE   default v1.2.6   (the tag the port branch is based on;
+#                       bump this in the same change as any fork rebase)
 #   MINIXRS_RUST_BASE   default 6f72b5dd5   (the minixrs rustc pin commit)
 #   MINIXRS_LIBC_BASE   default upstream/main
 #
@@ -46,7 +47,7 @@ export_fork() { # <name> <dir-basename> <base-ref> <required: 0|1>
 run_one() { # <name> <required>
     case "$1" in
         llvm) export_fork llvm llvm-minixrs "${MINIXRS_LLVM_BASE:-llvmorg-22.1.8}" "$2" ;;
-        musl) export_fork musl musl-minixrs "${MINIXRS_MUSL_BASE:-v1.2.5}" "$2" ;;
+        musl) export_fork musl musl-minixrs "${MINIXRS_MUSL_BASE:-v1.2.6}" "$2" ;;
         rust) export_fork rust rust-minixrs "${MINIXRS_RUST_BASE:-6f72b5dd5}" "$2" ;;
         libc) export_fork libc libc-minixrs "${MINIXRS_LIBC_BASE:-upstream/main}" "$2" ;;
         *)

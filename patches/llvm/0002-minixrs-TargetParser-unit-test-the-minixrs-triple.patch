@@ -1,7 +1,7 @@
 From 9018ff2ecf44c424a1d2e449fae770a308d4d981 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 01:16:06 -0500
-Subject: [PATCH 2/5] [minixrs] TargetParser: unit-test the minixrs triple
+Subject: [PATCH 2/6] [minixrs] TargetParser: unit-test the minixrs triple
 
 Covers parse (arch/vendor/os/environment), the getOSTypeName round-trip,
 and that the normalized string survives, in TripleTest.ParsedIDs beside

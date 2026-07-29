@@ -47,7 +47,7 @@ This is **LLVM patch 0006**, the first hand-off below.
 
 ## Work in this repo
 
-Landed on branch `feature/p3-m3-sysroot`:
+P3a, ✓ shipped (PR #3, merged 2026-07-27):
 
 - **`verify/check-image.sh`** (new) — the kernel loader's rules, on the host, in
   a second, instead of a hang in QEMU. Asserts against
@@ -103,18 +103,22 @@ leaving `--force` as the only undocumented way out.
 `scripts/build-musl.sh && scripts/build-sysroot.sh` today:
 
 ```
-build-sysroot: PASS layout (musl=6010533f clang=clang version 22.1.8 …)
+build-sysroot: PASS layout (musl=6010533f clang=clang version 22.1.8 (… 85b2f7a57345))
 build-sysroot: PASS ABI selftest
 hello: BRANDED minixrs abi_version=1 flags=0
-check-image: hello: PT_LOAD #1 [0x200000,0x201000) overlaps the stack page at 0x200000
-hello: NOT LOADABLE (1 rule violation(s))
+hello: LOADABLE (satisfies the minixrs loader rules)
+build-sysroot: branded hello installed at …/share/minixrs/hello
 ```
 
-That is the **correct** state until patch 0006 lands: the sysroot installs, the
-ABI selftest passes against the fork's own `bits/errno.h`, hello links from a
-bare driver line and carries the brand from musl's `crt1.o`, and the one
-remaining violation is exactly the one 0006 fixes. `build-sysroot.sh` refuses to
-install a hello that fails `check-image.sh` rather than papering over it.
+That is P3a plus P3b: the sysroot installs, the ABI selftest passes against the
+fork's own `bits/errno.h`, and hello links from a bare driver line, carries the
+brand from musl's `crt1.o`, and now clears the loader rules — the `0x200000`
+stack-page overlap that stood here until patch 0006 is gone, because the driver
+pins the base at `0x0010_0000`. `llvm-readelf --program-headers` confirms it
+directly: four `PT_LOAD`s from `0x100000`, each 4 KiB aligned, the last ending
+at `0x108738` — a clear megabyte below the stack page. `build-sysroot.sh`
+refuses to install a hello that fails `check-image.sh` rather than papering
+over it, which is why the install line is itself the gate.
 
 `verify/check-driver.sh` now runs its crt/sysroot assertions for real — they
 were `SKIP` until the sysroot existed — and passes all three.
@@ -123,26 +127,32 @@ were `SKIP` until the sysroot existed — and passes all three.
 
 Planned here, implemented in sessions inside those repos (cross-repo rule).
 
-### 1. `llvm-minixrs` — patch 0006, the image base
+### 1. `llvm-minixrs` — patch 0006, the image base ◀ ready (branch `feature/p3b-image-base`, pending merge)
 
-In `minixrs::Linker::ConstructJob`, beside the existing `-z` flags: push
-`--image-base=0x100000` unless the user passed `-T` / `--image-base`
-(`OPT_T_Group`).
+Full spec: **[llvm-m2.md](llvm-m2.md) Step 7** — the file a llvm-minixrs
+session already opens, which carries the branch preconditions, the maintenance
+contract, and Step 5's FileCheck lessons. Deliberately not restated here: one
+spec, one place.
 
-Extend `clang/test/Driver/minixrs.c` with a positive check **and a separate
-`--implicit-check-not` run** proving the override suppresses it. `-NOT` only
-scans the gaps *between* positive matches, and a `{{[^"]*}}` wildcard will
-happily swallow the exact spelling being excluded — put the negative in its own
-FileCheck run.
+In outline — push `--image-base=0x100000` in `minixrs::Linker::ConstructJob`
+beside the existing `-z` flags, **unconditionally**. A user `--image-base`
+already outranks it without any detection code, because lld takes the last
+spelling (`getLastArg`) and both `-Wl,` and `-T` arguments render after the
+driver's own flags. Cover it with a positive check in the main run plus a
+second run asserting that ordering.
 
 Then back here: rebuild (`scripts/build-llvm.sh`), re-export
-(`scripts/export-patches.sh llvm`) → **6** patches, and update every "5 files"
-reference (CLAUDE.md, roadmap, README).
+(`scripts/export-patches.sh llvm`) → **6** patches, update every "5 files"
+reference (CLAUDE.md, roadmap, README), and add the image base to
+`docs/sysroot-layout.md`'s contract points. That file is the normative
+statement of what the driver must emit, and its link-flag bullet (line 52)
+lists only the `-z` pair — leaving 0006 out would understate the contract
+`check-driver.sh` gates.
 
 **Done when** `scripts/build-sysroot.sh` installs the hello, i.e.
 `check-image.sh` is green on a bare driver link.
 
-### 2. `minixrs` — consume the SDK
+### 2. `minixrs` — consume the SDK ◀ next
 
 `kernel/build.rs`'s `build_hello` drops the
 `--target=aarch64-unknown-linux-musl` compile, the `hello.ld` script, the

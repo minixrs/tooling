@@ -1,7 +1,7 @@
 From 4ca768bbedadcc67560f9a4683fe3229946b4f22 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 03:37:40 -0500
-Subject: [PATCH 5/5] [minixrs] Driver: test the MinixRS link line
+Subject: [PATCH 5/6] [minixrs] Driver: test the MinixRS link line
 
 clang/test/Driver/minixrs.c pins the driver contract that
 tooling/docs/sysroot-layout.md fixes: ld.lld, --sysroot=, unconditional

@@ -28,15 +28,20 @@ change, in **both** the roadmap phase graph and the matching `docs/plans/`
 file. Reconcile stale `◀ ready` markers against `git log` when opening new
 work — "pending merge" labels on already-merged work accumulate otherwise.
 
+A work PR marks its **own** item `◀ ready (branch …, pending merge)`, never
+`✓ shipped` — the PR number and merge date do not exist yet. Flipping to
+`✓ shipped (PR #N, merged …)` is a later commit's job. Plans routinely say
+"→ shipped" for the item in flight; that instruction belongs to the follow-up.
+
 **Markers describe intent; scripts describe reality.** Prefer running the
 gate over trusting a marker:
 
 ```sh
 verify/selftest.sh          # brand + image fixtures, needs no SDK — 7 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
-scripts/build-sysroot.sh --skip-musl   # the P3 gate (fails on the image base
-                            # until LLVM patch 0006 lands — that is correct)
-ls patches/llvm/*.patch     # 5 files since the P2b series was exported
+scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
+                            # hello at $MINIXRS_SDK/share/minixrs/hello
+ls patches/llvm/*.patch     # 6 files (0001-0005 M2, 0006 the image base)
 ```
 
 ## Cross-repo rule
@@ -82,6 +87,9 @@ Mount the forks volume first — every fork-consuming script fails fast without 
   build; raise it or the cache self-evicts to a ~0% hit rate.
 - `build-llvm.sh` reuses the same `build-minixrs` dir as a manual `ninja clang` but
   reconfigures — expect a broader rebuild than the incremental you were just running.
+- **`build-musl.sh`'s stamp embeds the clang version string**, which carries the
+  fork SHA — so any LLVM rebuild invalidates it and `build-sysroot.sh` rebuilds
+  musl. That is correct, not a surprise to route around with `--skip-musl`.
 - **musl builds *outside* its fork checkout**, unlike LLVM: minixrs pins
   `musl-minixrs` as a submodule and its CI asserts a clean `git status`. Build dirs
   live in `$MINIXRS_FORKS_DIR/build/`.
@@ -110,6 +118,12 @@ CMake defaults to the host and says nothing. All four traps below were hit on
   the source dir, and compiler-rt caches its *derived* install path — so flipping a
   layout flag rebuilds and installs to the old location anyway. Guard on the derived
   value, `rm -rf` on mismatch.
+
+**An LLVM rebuild does not clobber compiler-rt.** `build-llvm.sh` runs `ninja
+install` into the prefix without wiping it, so
+`lib/clang/22/lib/<triple>/libclang_rt.builtins.a` survives — no need to re-run
+`build-compiler-rt.sh` after a driver-only patch. Confirm the file is there
+rather than assume it.
 
 compiler-rt specifics: enter at `compiler-rt/lib/builtins` (standalone project,
 skips `load_llvm_config()`); `LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON` plus
@@ -149,7 +163,14 @@ are the failure mode here: the scripts are mostly preconditions.
 - **A new test that passes on its first run has not been verified.** Break the *source*
   to prove a check is load-bearing; breaking only the test proves it is merely
   evaluated. Choose the control token carefully — one that a positive check already
-  consumed reports a false green.
+  consumed reports a false green. The same holds for a new assertion in a gate
+  script: add it *before* the fix is installed, so the failing run is free proof
+  that it is load bearing.
+- **A grep hit is not the consumer.** `imageBase` appears in `lld/ELF/Writer.cpp`
+  as a *diagnostic* threshold and in `LinkerScript.cpp` as the actual layout base;
+  citing the first as the second put three wrong claims into a plan doc. Trace
+  which site drives behavior, and cite the line you actually read — line numbers
+  drift by one if you count a `sed` window by hand instead of using `grep -n`.
 - **A sibling check can mask the one you disabled.** Break the whole rule, not one
   clause: disabling only `check-image.sh`'s `p_vaddr` alignment test still printed
   "not 4096-byte aligned" from the `p_offset` test — a false green for the sabotage.

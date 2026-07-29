@@ -12,7 +12,7 @@
 # check-image.sh, the kernel loader's rules. All four link branded.s and vary
 # only the link, so each fixture violates exactly one rule:
 #
-#   --image-base=0x100000   → exit 0  (the base LLVM patch 0006 pins)
+#   --image-base=0x100000   → exit 0  (the base LLVM patch 0006 pinned)
 #   lld's default base      → exit 1  (0x200000 — lands on the stack page)
 #   -pie                    → exit 1  (ET_DYN, the loader's BadType)
 #   testdata/misaligned.ld  → exit 1  (a PT_LOAD off 4 KiB alignment)

@@ -1,7 +1,7 @@
 From 2963205c993d136e646f50d4190d27f039216c1c Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 01:16:05 -0500
-Subject: [PATCH 1/5] [minixrs] TargetParser: add the MinixRS OSType
+Subject: [PATCH 1/6] [minixrs] TargetParser: add the MinixRS OSType
 
 Teach Triple about `aarch64-unknown-minixrs`, the first of the M2 series.
 

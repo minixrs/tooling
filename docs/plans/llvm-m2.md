@@ -1,13 +1,20 @@
-# llvm-minixrs M2 — teach clang/lld `aarch64-unknown-minixrs`
+# llvm-minixrs — the `aarch64-unknown-minixrs` patch series
 
-Companion implementation plan produced by the tooling repo (P2). **Execute in
-a session inside `$MINIXRS_FORKS_DIR/llvm-minixrs`** (default
+Companion implementation plan produced by the tooling repo. **Execute in a
+session inside `$MINIXRS_FORKS_DIR/llvm-minixrs`** (default
 `~/src/minixrs-forks/llvm-minixrs`). Normative references:
 `tooling/docs/sysroot-layout.md` (what the driver must emit),
-`tooling/docs/abi-note.md` (the brand), `tooling/docs/roadmap.md` (where M2
-sits).
+`tooling/docs/abi-note.md` (the brand), `tooling/docs/roadmap.md` (where each
+step sits).
 
-## Goal
+**The scope is the fork branch, not one milestone.** Steps 1–6 are M2 (P2b):
+teaching clang/lld the triple. Step 7 is P3b: pinning the image base. They
+belong to different roadmap phases but to the same fork, the same
+`minixrs/release/22.x`, and the same exported series — splitting them into two
+files would split the preconditions and the maintenance contract with them.
+Each step carries its own marker.
+
+## M2 goal — Steps 1–6
 
 `clang --target=aarch64-unknown-minixrs` is a real target: the preprocessor
 defines `__minixrs__`, the driver selects a MinixRS toolchain that links
@@ -17,20 +24,21 @@ carries the identity note.
 **Gate**: `ninja check-clang-driver` and the TargetParser unit tests green;
 `tooling/verify/check-driver.sh` green.
 
-**Status: shipped (PR #1, merged 2026-07-26).** The triple, its unit tests,
+**M2 status: shipped (PR #1, merged 2026-07-26).** The triple, its unit tests,
 the preprocessor target, the driver toolchain and its lit test are on
 `minixrs/release/22.x` (`2963205c993d`, `9018ff2ecf44`, `8f6f13694e9e`,
 `0a0281f3c447`, `4ca768bbedad`), **`check-driver.sh` is green end to end** —
-it still SKIPs its crt/sysroot assertions, which need the P3 sysroot —
-`check-clang-driver` is clean at 1403 tests, and the five-patch series is
-exported to `tooling/patches/llvm/`. Markers
+it SKIPped its crt/sysroot assertions at the time, for want of the P3 sysroot,
+but P3a installed one and they now run for real and pass —
+`check-clang-driver` is clean at 1403 tests, and Steps 1–6 are exported to
+`tooling/patches/llvm/` as patches 0001–0005 (Step 7 adds 0006). Markers
 follow `tooling/docs/roadmap.md`:
 `◀ next` (unstarted), `◀ ready (branch …, pending merge)`, `✓ shipped (PR #N,
-merged YYYY-MM-DD)`. Flip each step's marker as it lands, and flip **P2b** in
-the roadmap's phase graph when the whole series ships — it stays `◀ next`
-while the series is only partly implemented, since the three-marker
-convention has no in-progress state and these per-step markers carry that
-granularity.
+merged YYYY-MM-DD)`. Flip each step's marker as it lands. This file feeds
+**two** roadmap entries, because the series spans two phases: Steps 1–6 flip
+**P2b**, and Step 7 flips **P3b**. A phase entry stays `◀ next` while its own
+steps are only partly implemented, since the three-marker convention has no
+in-progress state and these per-step markers carry that granularity.
 
 ## Preconditions
 
@@ -42,8 +50,8 @@ granularity.
 - A baseline `build-llvm.sh --baseline` has already succeeded, so any build
   failure from here is unambiguously a patch failure.
 
-One commit per area below, so `export-patches.sh llvm` yields a clean 4–5
-patch series.
+One commit per area below, so `export-patches.sh llvm` yields a clean series:
+five patches through Step 6, **six** with Step 7.
 
 ---
 
@@ -396,7 +404,7 @@ with `-nostdlib`) is the half of the gate that is satisfiable now.
 
 Results: `check-clang-driver` 1403 tests / 0 failures; `TargetParserTests` 645
 tests, 642 passed and 3 skipped (AIX host probes); `check-driver.sh` exit 0;
-five patches in `patches/llvm/`.
+five patches in `patches/llvm/` (Step 7 later brings it to six).
 
 **`build-compiler-rt.sh` had never actually been run.** It could not be —
 until Step 4 there was no driver for it to use — so Step 6 was its first
@@ -425,6 +433,141 @@ checks the derived `COMPILER_RT_INSTALL_LIBRARY_DIR` (`lib` = per-target,
 `lib/generic` = legacy), not just the inputs, and wipes on mismatch.
 
 Finally `git push origin minixrs/release/22.x`.
+
+## Step 7 — the image base (P3b) ◀ ready (branch `feature/p3b-image-base`, pending merge)
+
+Roadmap phase **P3b**, not M2 — but the same fork on the same branch, so it
+appends to this series as patch **0006** rather than opening a second one.
+Design context: `tooling/docs/plans/musl-m3.md`, "The one real design finding:
+the image base".
+
+lld's default aarch64 image base is `0x200000`. minixrs maps **every**
+process's initial stack page at `SERVER_STACK_VA = 0x0020_0000`
+(`minixrs/kernel/src/arch/aarch64/userland.rs`), so a default-linked SDK binary
+lands exactly on its own stack — the kernel loads it happily and the first push
+corrupts its own text. Images go at `0x0010_0000` instead, the base
+`minixrs/servers/*/user.ld` already uses; sharing it is safe because every
+process gets its own TTBR0.
+
+**Pinning it in the driver is the milestone**, not an implementation detail of
+it. A linker script, or a `-Wl,--image-base` in the build scripts, would fix
+the binary while leaving M3's actual claim — that a bare `clang
+--target=aarch64-unknown-minixrs hello.c -o hello` is sufficient — false.
+
+`clang/lib/Driver/ToolChains/MinixRS.cpp`, in `minixrs::Linker::ConstructJob`,
+between the second `-z` pair (line 69) and `--eh-frame-hdr` (line 71):
+
+```cpp
+  // minixrs maps every process's initial stack page at SERVER_STACK_VA =
+  // 0x0020_0000 (kernel/src/arch/aarch64/userland.rs), which is exactly lld's
+  // default aarch64 image base -- a default-linked binary would be loaded onto
+  // its own stack and corrupt its text at the first push. Pin the base at the
+  // 0x0010_0000 that servers/*/user.ld already uses; processes can share it
+  // because each has its own TTBR0. This belongs in the driver rather than in
+  // a linker script so that a bare clang invocation stays sufficient
+  // (tooling/docs/plans/musl-m3.md).
+  CmdArgs.push_back("--image-base=0x100000");
+```
+
+**Push it unguarded — do not add a suppression check.** A user `--image-base`
+already wins without one, so a condition would be untested policy layered over
+documented lld behaviour:
+
+- lld resolves the option with `args.getLastArg(OPT_image_base)`
+  (`lld/ELF/Driver.cpp:2279`) — the last spelling on the command line wins.
+- Both `-T` (`OPT_T_Group`, pushed at `MinixRS.cpp:90-91`) and `-Wl,` arguments
+  (`AddLinkerInputs`, `MinixRS.cpp:99`) render *after* the driver's own flags.
+- A linker script carrying a `SECTIONS` command takes layout over outright:
+  `LinkerScript::assignAddresses` (`LinkerScript.cpp:1537`) starts `dot` at
+  `ctx.arg.imageBase.value_or(0)` (line 1541) instead of at
+  `ctx.target->getImageBase()` (line 1544). It keys on `hasSectionsCommand`,
+  **not** on `-T` — a `-T` script with no `SECTIONS` does not reach that path.
+  Do not confuse it with `Writer.cpp:1638`'s same-named local, which is only
+  the threshold for the "address is smaller than image base" diagnostic.
+
+**The upstream precedent is narrower than "unconditional."**
+`clang/lib/Driver/ToolChains/PS4CPU.cpp:325-327` guards its
+`--image-base=0x400000` on *output kind* — `if (!Relocatable && !Shared &&
+!PIE)` — because PS4 produces all three. What it does **not** do, and the part
+that is precedent here, is check whether the user already passed
+`--image-base`. minixrs can drop the guard as well as the check, because the
+platform forecloses each of PS4's three cases: `-shared` is a hard error
+(Step 4), `-pie`/`-no-pie` are claimed and ignored, and `-r` output has every
+section address zeroed (`lld/ELF/Writer.cpp:1634-1636`), so the base never
+reaches the artifact.
+
+This supersedes the earlier "unless the user passed `-T` / `--image-base`"
+wording in `musl-m3.md`, which that file no longer carries.
+
+**`clang/test/Driver/minixrs.c`** — two additions.
+
+1. In the main run, after the `-z` pair (line 28) and before the `crt1.o`
+   check (line 32):
+
+```
+// CHECK-SAME: "--image-base=0x100000"
+```
+
+2. A new run proving the override, asserted **by order** rather than by
+   negation:
+
+```
+// A user --image-base is not suppressed, it is outranked: lld takes the last
+// spelling (getLastArg), and -Wl, args render after the driver's own flags.
+// Asserted positionally with CHECK-SAME rather than with a -NOT, which would
+// have to exclude the very string the driver legitimately emits.
+// RUN: %clang -### %s --target=aarch64-unknown-minixrs \
+// RUN:     -Wl,--image-base=0x400000 2>&1 \
+// RUN:     | FileCheck --check-prefix=CHECK-BASE-OVERRIDE %s
+// CHECK-BASE-OVERRIDE: {{.*}}ld.lld
+// CHECK-BASE-OVERRIDE-SAME: "--image-base=0x100000"
+// CHECK-BASE-OVERRIDE-SAME: "--image-base=0x400000"
+```
+
+Both are positive checks, and that is the point. Step 5's `-NOT` discipline
+exists because a `-NOT` only scans the gaps *between* positive matches; here
+the property under test **is** the ordering, which `CHECK-SAME` asserts
+directly and a negation could not express at all.
+
+**Verify the test source-side.** A new test that passes on its first run has
+not been verified (Step 5). Delete the `push_back` from `MinixRS.cpp` and
+re-run: **both** the main run and `CHECK-BASE-OVERRIDE` must fail, and the
+override run must fail on its *first* `CHECK-BASE-OVERRIDE-SAME` — that is the
+evidence it tests the driver's flag rather than merely echoing the user's.
+Restore the line and re-run.
+
+Gate, from the build dir:
+
+```sh
+ninja check-clang-driver     # was 1403 tests / 0 failures at Step 6
+```
+
+One commit, `[minixrs] Driver: pin the image base at 0x100000`, then push. It
+appends to `4ca768bbedad`, so no force-push:
+
+```sh
+git push origin minixrs/release/22.x
+```
+
+Then back in the tooling repo, on branch `feature/p3b-image-base`: add the
+`--image-base=0x100000` assertion to `verify/check-driver.sh` step 2 and run it
+**before** rebuilding, so it fails against the pre-0006 SDK clang on exactly
+that line and nothing else — a free source-side proof that the new assertion is
+load bearing. Then `scripts/build-llvm.sh`, `verify/check-driver.sh`,
+`scripts/build-sysroot.sh` (**not** `--skip-musl`: `build-musl.sh`'s stamp keys
+on the clang version string, which embeds the fork SHA, so the rebuild
+correctly invalidates it), `verify/selftest.sh`, and
+`scripts/export-patches.sh llvm` → **6** patches.
+
+The image base is a **contract change, not just a flag**: record it in
+`tooling/docs/sysroot-layout.md`'s contract points, beside the `-z` bullet it
+belongs with. That file is the normative statement of what the driver must
+emit — the one this plan's header cites — so an unrecorded flag is a contract
+that only exists in a driver source comment.
+
+**Done when** `scripts/build-sysroot.sh` reports `hello: LOADABLE` and installs
+`$MINIXRS_SDK/share/minixrs/hello`, where it currently reports the `0x200000`
+stack overlap.
 
 ## Maintenance contract
 

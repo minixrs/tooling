@@ -5,7 +5,8 @@
 #
 #   1. preprocessor: __minixrs__, __unix__, __ELF__ are defined
 #   2. driver: -### picks ld.lld, links -static, passes the minixrs -z flags,
-#      and resolves crt objects out of $MINIXRS_SDK/sysroot/usr/lib
+#      pins the image base at 0x0010_0000, and resolves crt objects out of
+#      $MINIXRS_SDK/sysroot/usr/lib
 #   3. link: assemble + link verify/testdata/branded.s and confirm the result
 #      carries the identity note (check-brand.sh exit 0)
 #
@@ -84,6 +85,15 @@ grep -q 'max-page-size=4096' <<<"$link_line" \
 grep -q 'separate-loadable-segments' <<<"$link_line" \
     && pass "-z separate-loadable-segments" \
     || bad "-z separate-loadable-segments not on the link line"
+
+# minixrs maps every process's initial stack page at SERVER_STACK_VA =
+# 0x0020_0000, which is exactly lld's default aarch64 image base. LLVM patch
+# 0006 pins the base at 0x0010_0000 in the driver, so that a bare clang line
+# does not produce a binary loaded onto its own stack (docs/plans/llvm-m2.md
+# Step 7). -- because the pattern starts with a dash.
+grep -q -- '--image-base=0x100000' <<<"$link_line" \
+    && pass "--image-base=0x100000" \
+    || bad "--image-base=0x100000 not on the link line"
 
 if [ -d "$SYSROOT/usr/lib" ]; then
     for obj in crt1.o crti.o crtn.o; do

@@ -1,7 +1,7 @@
 From 8f6f13694e9ebd40908546bbc95c3e3571db4b49 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 01:16:06 -0500
-Subject: [PATCH 3/5] [minixrs] Basic: add the minixrs preprocessor target
+Subject: [PATCH 3/6] [minixrs] Basic: add the minixrs preprocessor target
 
 MinixRSTargetInfo defines __minixrs__/__minixrs, __unix__/__unix and
 __ELF__, and sets WIntType to unsigned int. Shaped after

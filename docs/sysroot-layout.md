@@ -53,6 +53,15 @@ $MINIXRS_SDK/
   `-z max-page-size=4096 -z separate-loadable-segments` (minixrs D13) so the
   kernel's loader constraints (page-aligned vaddr *and* file offset per
   PT_LOAD) always hold.
+- **Images are based at `0x0010_0000`.** The driver passes
+  `--image-base=0x100000` (LLVM patch 0006). lld's default aarch64 base is
+  `0x200000`, which is exactly where minixrs maps every process's initial stack
+  page (`SERVER_STACK_VA`, `kernel/src/arch/aarch64/userland.rs`), so a
+  default-linked binary would be loaded onto its own stack and corrupt its text
+  at the first push. `0x0010_0000` is the base `servers/*/user.ld` already
+  uses; processes can share it because each has its own TTBR0. The flag is
+  gated by `verify/check-driver.sh`, its consequence by
+  `verify/check-image.sh`.
 - **crt objects come from `sysroot/usr/lib`.** The driver searches there —
   crt1.o is the C-side brand emitter, so replacing it with a foreign crt1
   produces binaries the kernel refuses.

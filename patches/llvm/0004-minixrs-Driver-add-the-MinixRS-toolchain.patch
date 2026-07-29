@@ -1,7 +1,7 @@
 From 0a0281f3c4470365999607aa76342eebf06551d5 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 02:41:54 -0500
-Subject: [PATCH 4/5] [minixrs] Driver: add the MinixRS toolchain
+Subject: [PATCH 4/6] [minixrs] Driver: add the MinixRS toolchain
 
 Give aarch64-unknown-minixrs a real toolchain instead of letting it fall
 through to Generic_ELF, which drove /usr/bin/gcc as the linker.

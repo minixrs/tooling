@@ -1,0 +1,104 @@
+From 85b2f7a57345f195d88627840eaca7a19b8d7986 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Wed, 29 Jul 2026 02:23:11 -0500
+Subject: [PATCH 6/6] [minixrs] Driver: pin the image base at 0x100000
+
+lld's default aarch64 image base is 0x200000, which is exactly the VA minixrs
+maps every process's initial stack page at (SERVER_STACK_VA,
+kernel/src/arch/aarch64/userland.rs). load_exec_image maps the PT_LOADs first
+and the stack second, so a default-linked binary does not corrupt itself -- it
+never runs at all: the stack's map_page lands on the image's own page, fails
+AlreadyMapped, and the load unwinds to None (ENOMEM from exec, or a boot-time
+"server image load failed").
+
+Pin the base at the 0x100000 that servers/*/user.ld already uses. Processes can
+share the VA because each gets its own TTBR0. That leaves the image 1 MiB
+before it reaches the stack page; one whose PT_LOADs reach 0x200000 collides
+and is rejected the same way.
+
+This goes in the driver rather than in a linker script or the build scripts
+because it *is* the milestone, not an implementation detail of it: those would
+fix the binary while leaving M3's actual claim -- that a bare
+"clang --target=aarch64-unknown-minixrs hello.c -o hello" suffices -- false.
+
+Emitted unconditionally, with no suppression check for a user --image-base.
+None is needed: lld resolves the option with getLastArg, so the last spelling
+wins, and both -T (OPT_T_Group) and -Wl, args (AddLinkerInputs) render after
+the driver's own flags. A condition would be untested policy over documented
+behaviour. Under -r lld forces imageBase to 0 (lld/ELF/Writer.cpp), so the flag
+is inert there -- as are the two -z flags above it, which are unconditional for
+the same reason.
+
+The override run asserts that by order rather than by negation: a CHECK-NOT
+would have to exclude the very string the driver legitimately emits, so both
+bases are matched positionally with CHECK-SAME.
+
+Mutation-tested from the source side. Without the push_back the main run fails,
+and the override run fails on its *first* CHECK-BASE-OVERRIDE-SAME
+("--image-base=0x100000") rather than the second -- the evidence that it tests
+the driver's own flag and not merely an echo of the user's.
+
+check-clang-driver: 1403 tests, 1320 passed, 82 unsupported, 1 XFAIL, 0
+failures.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ clang/lib/Driver/ToolChains/MinixRS.cpp | 14 ++++++++++++++
+ clang/test/Driver/minixrs.c             | 12 ++++++++++++
+ 2 files changed, 26 insertions(+)
+
+diff --git a/clang/lib/Driver/ToolChains/MinixRS.cpp b/clang/lib/Driver/ToolChains/MinixRS.cpp
+index b4dcfac6c661..84dd871a8930 100644
+--- a/clang/lib/Driver/ToolChains/MinixRS.cpp
++++ b/clang/lib/Driver/ToolChains/MinixRS.cpp
+@@ -68,6 +68,20 @@ void minixrs::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+   CmdArgs.push_back("-z");
+   CmdArgs.push_back("separate-loadable-segments");
+ 
++  // minixrs maps every process's initial stack page at SERVER_STACK_VA =
++  // 0x0020_0000 (kernel/src/arch/aarch64/userland.rs), which is exactly lld's
++  // default aarch64 image base. load_exec_image maps the PT_LOADs first and
++  // the stack second, so a default-linked binary does not corrupt anything --
++  // it never runs at all: the stack's map_page lands on the image's own page,
++  // fails AlreadyMapped, and the load unwinds to None (ENOMEM from exec, or a
++  // boot-time "server image load failed"). Pin the base at the 0x0010_0000
++  // that servers/*/user.ld already uses; processes can share it because each
++  // has its own TTBR0. That leaves the image 1 MiB of VA: one whose PT_LOADs
++  // reach 0x0020_0000 collides with the stack and is rejected the same way.
++  // This belongs in the driver rather than in a linker script so that a bare
++  // clang invocation stays sufficient (tooling/docs/plans/musl-m3.md).
++  CmdArgs.push_back("--image-base=0x100000");
++
+   CmdArgs.push_back("--eh-frame-hdr");
+ 
+   if (Args.hasArg(options::OPT_s))
+diff --git a/clang/test/Driver/minixrs.c b/clang/test/Driver/minixrs.c
+index df0eb65672c9..114c153f67ff 100644
+--- a/clang/test/Driver/minixrs.c
++++ b/clang/test/Driver/minixrs.c
+@@ -26,6 +26,7 @@
+ // PT_LOAD (minixrs D13).
+ // CHECK-SAME: "-z" "max-page-size=4096"
+ // CHECK-SAME: "-z" "separate-loadable-segments"
++// CHECK-SAME: "--image-base=0x100000"
+ 
+ // crt1.o is the C-side brand emitter, so it has to come from the sysroot and
+ // not from a host toolchain.
+@@ -88,3 +89,14 @@
+ // RUN: not %clang -### %s --target=aarch64-unknown-minixrs -fsanitize=address 2>&1 \
+ // RUN:     | FileCheck --check-prefix=CHECK-NO-SANITIZER %s
+ // CHECK-NO-SANITIZER: error: unsupported option '-fsanitize=address' for target 'aarch64-unknown-minixrs'
++
++// A user --image-base is not suppressed, it is outranked: lld takes the last
++// spelling (getLastArg), and -Wl, args render after the driver's own flags.
++// Asserted positionally with CHECK-SAME rather than with a -NOT, which would
++// have to exclude the very string the driver legitimately emits.
++// RUN: %clang -### %s --target=aarch64-unknown-minixrs \
++// RUN:     -Wl,--image-base=0x400000 2>&1 \
++// RUN:     | FileCheck --check-prefix=CHECK-BASE-OVERRIDE %s
++// CHECK-BASE-OVERRIDE: {{.*}}ld.lld
++// CHECK-BASE-OVERRIDE-SAME: "--image-base=0x100000"
++// CHECK-BASE-OVERRIDE-SAME: "--image-base=0x400000"
+-- 
+2.50.1 (Apple Git-155)
+

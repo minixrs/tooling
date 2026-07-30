@@ -58,8 +58,8 @@ P0  tooling bootstrap (this repo)                            ✓ shipped (commit
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
 P2b [llvm-minixrs] M2: the patch series — triple + driver    ✓ shipped (PR #1, merged 2026-07-26)
-P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ◀ next — P3a shipped (PR #3), P3b ready; P3c (minixrs consumption) remains
-P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   — needs P3 (the slice 5.6 ABI freeze is now in effect)
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ✓ shipped — P3a (PR #3), P3b (PR #4), P3c (minixrs PR #50); M3a closed
+P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   ◀ next — the slice 5.6 ABI freeze is in effect; M3b rides with minixrs slice 5.9
 P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
 ```
 
@@ -165,30 +165,49 @@ verify/check-driver.sh      # exits 0 (crt/sysroot assertions active since P3a)
 ls patches/llvm/*.patch     # 6 files (0001-0005 M2, 0006 the image base)
 ```
 
-## P3 — M3: the sysroot exists (musl-minixrs + tooling) — ◀ next
+## P3 — M3: the sysroot exists (musl-minixrs + tooling) ✓ shipped — M3a closed
 
 Full plan: [plans/musl-m3.md](plans/musl-m3.md).
 
-**The OS half is done and the fork exists.** minixrs slice 5.6 (PR #47,
+**The OS half was done and the fork existed.** minixrs slice 5.6 (PR #47,
 2026-07-26) shipped the port and ran a branded C hello world on minixrs, so
-milestone A is reached — but **through the stand-in triple**
+milestone A was reached — but **through the stand-in triple**
 (`aarch64-unknown-linux-musl` + stock clang), not the patched clang. Closing M3
-means reproducing that through the SDK on the real `aarch64-unknown-minixrs`
-triple. The port itself is not the remaining work; the toolchain flavor is.
+meant reproducing that through the SDK on the real `aarch64-unknown-minixrs`
+triple. The port itself was never the remaining work; the toolchain flavor was.
 
-Three parts, in three repos:
+Three parts, in three repos — all three now landed:
 
 | Part | Status |
 |---|---|
 | **P3a** [tooling] the SDK sysroot: `build-musl.sh`, `build-sysroot.sh`, `verify/check-image.sh` | ✓ shipped (PR #3, merged 2026-07-27) |
-| **P3b** [llvm-minixrs] patch 0006: pin the image base at `0x0010_0000` | ◀ ready (branch `feature/p3b-image-base`, pending merge) |
-| **P3c** [minixrs] `kernel/build.rs` consumes `$MINIXRS_SDK` | ◀ next |
+| **P3b** [llvm-minixrs] patch 0006: pin the image base at `0x0010_0000` | ✓ shipped (PR #4, merged 2026-07-30) |
+| **P3c** [minixrs] `kernel/build.rs` consumes `$MINIXRS_SDK` | ✓ shipped (minixrs PR #50, merged 2026-07-30) |
+
+**M3a is closed.** minixrs now boots a `hello` built by the patched clang from a
+single driver invocation on the real triple: entry `0x101000`, four page-aligned
+`PT_LOAD`s, the brand note at `0x100200`, and all five C boot markers. M3b —
+the same binary reached via slice 5.9's exec-from-FS — rides along with that
+slice and was always out of scope here.
 
 P3a builds a sysroot that installs, passes the ABI selftest, and links a
 branded hello from a bare `clang --target=aarch64-unknown-minixrs hello.c -o
 hello`. The one thing still wrong with that hello was the image base; P3b
 pinned it at `0x0010_0000` in the driver, and `build-sysroot.sh` now installs
 the hello at `$MINIXRS_SDK/share/minixrs/hello` — see below.
+
+P3c then made minixrs *consume* that: `kernel/build.rs` selects a `hello`
+toolchain three ways — SDK, then the in-tree musl sysroot, then the `worker`
+ELF under that name. The middle one is **not** a fallback and was deliberately
+kept: no CI job installs an SDK (an LLVM build is hours) while minixrs's
+blocking `qemu-smoke` gate requires the five C markers. Two consequences worth
+carrying into P4. A usable SDK that fails to build **panics** rather than
+demoting, because the boot markers are byte-identical across flavors — a silent
+demotion would report a regressed toolchain as a healthy build. And minixrs
+probes exactly three files (`bin/clang`, `sysroot/.stamp`,
+`sysroot/usr/lib/libc.a`), never the crt objects, the builtins archive, or the
+`lib/clang/<ver>` resource dir: the driver names those, and the version
+component must stay derived rather than hard-coded.
 
 The fork: `minixrs/musl-minixrs`, branch **`minixrs`** (the default; `main` is a
 pristine upstream mirror, never committed to), based on tag **v1.2.6**. Its

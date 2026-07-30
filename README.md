@@ -116,7 +116,8 @@ same `◀ next` / `◀ ready` / `✓ shipped` markers the minixrs repo uses.
 | P1 / M1 triple + branding (minixrs repo) | ✓ shipped (PR #44) |
 | P2a llvm fork bring-up | ✓ shipped |
 | P2b / M2 LLVM patch series | ✓ shipped (PR #1) — [docs/plans/llvm-m2.md](docs/plans/llvm-m2.md) |
-| **P3 / M3 sysroot** | **◀ next** — [docs/plans/musl-m3.md](docs/plans/musl-m3.md); P3a shipped and P3b (LLVM patch 0006) ready, P3c (minixrs consumes the SDK) is the next step |
+| P3 / M3 sysroot | ✓ shipped — [docs/plans/musl-m3.md](docs/plans/musl-m3.md); P3a (PR #3), P3b (LLVM patch 0006, PR #4), P3c (minixrs PR #50). **M3a closed**; M3b rides with minixrs slice 5.9 |
+| **P4 / M4–M5 std PAL + rustup** | **◀ next** — the slice 5.6 ABI freeze it needs is in effect |
 
 `patches/*/` is `git format-patch` output, re-exported by
 `scripts/export-patches.sh` after every fork rebase. `llvm/` holds 6 patches

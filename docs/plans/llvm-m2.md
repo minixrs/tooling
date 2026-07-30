@@ -434,7 +434,7 @@ checks the derived `COMPILER_RT_INSTALL_LIBRARY_DIR` (`lib` = per-target,
 
 Finally `git push origin minixrs/release/22.x`.
 
-## Step 7 — the image base (P3b) ◀ ready (branch `feature/p3b-image-base`, pending merge)
+## Step 7 — the image base (P3b) ✓ shipped (PR #4, merged 2026-07-30)
 
 Roadmap phase **P3b**, not M2 — but the same fork on the same branch, so it
 appends to this series as patch **0006** rather than opening a second one.

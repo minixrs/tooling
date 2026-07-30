@@ -103,12 +103,16 @@ leaving `--force` as the only undocumented way out.
 `scripts/build-musl.sh && scripts/build-sysroot.sh` today:
 
 ```
-build-sysroot: PASS layout (musl=6010533f clang=clang version 22.1.8 (… 85b2f7a57345))
+build-sysroot: PASS layout (musl=6010533f minixrs=1132e62f clang=clang version 22.1.8 (… 85b2f7a57345))
 build-sysroot: PASS ABI selftest
 hello: BRANDED minixrs abi_version=1 flags=0
 hello: LOADABLE (satisfies the minixrs loader rules)
 build-sysroot: branded hello installed at …/share/minixrs/hello
 ```
+
+The stamp carries **three** fields, not two — `musl=` (the fork commit the
+sysroot was built from), `minixrs=` (the commit whose `gen-c-headers` output was
+installed), and `clang=`.
 
 That is P3a plus P3b: the sysroot installs, the ABI selftest passes against the
 fork's own `bits/errno.h`, and hello links from a bare driver line, carries the
@@ -123,11 +127,33 @@ over it, which is why the install line is itself the gate.
 `verify/check-driver.sh` now runs its crt/sysroot assertions for real — they
 were `SKIP` until the sysroot existed — and passes all three.
 
+**M3a is closed.** With P3c (minixrs PR #50, 2026-07-30) the consumption side
+landed too: minixrs's `kernel/build.rs` builds its boot-embedded `hello` with
+`$MINIXRS_SDK/bin/clang --target=aarch64-unknown-minixrs` and boots it — entry
+`0x101000`, four page-aligned `PT_LOAD`s, brand note at `0x100200`, last mapped
+byte `0x108ce0`, all five C boot markers, 72/72 on minixrs's marker check. Its
+copy of the hello measures 46,664 B against the stand-in triple's 200,152 B.
+
+Two things this gate does **not** cover, both carried forward:
+
+- **The SDK flavor has zero CI coverage anywhere.** No minixrs job installs an
+  SDK, so `qemu-smoke` exercises the in-tree musl sysroot and `clippy-kernel`
+  the `worker` fallback. The SDK path is proven only by local runs. An
+  SDK-cached CI job is future work.
+- **Nothing enforces that the SDK's musl and minixrs's `external/musl` agree.**
+  They do today — the stamp's `musl=6010533f` is the merge commit of the
+  submodule's `f1db256f` and `git diff` between them is empty — but an equality
+  check is impossible, since the SHAs legitimately differ. Rebase the fork
+  without re-running `build-sysroot.sh` and the two flavors silently test
+  different libc code. Likewise `minixrs=` is a **snapshot** of the installed
+  `minixrs/*.h`: any `kernel-shared` ABI change needs a `build-sysroot.sh`
+  re-run, which is tolerable only under the slice-5.6 ABI freeze.
+
 ## Cross-repo hand-offs
 
 Planned here, implemented in sessions inside those repos (cross-repo rule).
 
-### 1. `llvm-minixrs` — patch 0006, the image base ◀ ready (branch `feature/p3b-image-base`, pending merge)
+### 1. `llvm-minixrs` — patch 0006, the image base ✓ shipped (PR #4, merged 2026-07-30)
 
 Full spec: **[llvm-m2.md](llvm-m2.md) Step 7** — the file a llvm-minixrs
 session already opens, which carries the branch preconditions, the maintenance
@@ -152,7 +178,7 @@ lists only the `-z` pair — leaving 0006 out would understate the contract
 **Done when** `scripts/build-sysroot.sh` installs the hello, i.e.
 `check-image.sh` is green on a bare driver link.
 
-### 2. `minixrs` — consume the SDK ◀ next
+### 2. `minixrs` — consume the SDK ✓ shipped (minixrs PR #50, merged 2026-07-30)
 
 `kernel/build.rs`'s `build_hello` drops the
 `--target=aarch64-unknown-linux-musl` compile, the `hello.ld` script, the
@@ -164,15 +190,35 @@ intact.
 `tools/build-musl.sh` **stays** until M3 is stable — as of slice 5.6 it is the
 blocking `qemu-smoke` job's real dependency, not a fallback.
 
-Also reconcile `docs/plan.md:531`, which still marks slice 5.6
-`◀ ready (pending merge)` though PR #47 merged.
+**As landed**, two refinements on the sketch above. The SDK call did not
+*replace* the stand-in path but was added beside it: selection is three-way
+(`Sdk` → `Musl` → `Worker`), because "`build-musl.sh` stays" and "`build_hello`
+becomes one clang call" cannot both hold in one function. And a *usable* SDK
+that fails to build panics rather than falling through to `Musl` — the boot
+markers are byte-identical across the two flavors, so demoting would report a
+regressed toolchain as a healthy build. minixrs mutation-tested that: forcing
+`--image-base=0x200000` in the SDK call cost the `name=hello entry=` trace and
+all five C markers, which is also why no build-time loader gate was added there
+— an image-base regression is already loud at exec time. `check-image.sh`
+remains the by-hand loader check.
 
-## M3 gate
+The `docs/plan.md` reconcile ask was satisfied differently than written: slice
+5.6 had already been flipped by the time P3c ran, and the stale `◀ ready` marker
+was **5.7**'s (PR #48, merged 2026-07-27). minixrs PR #50 flipped that one; its
+own P3c entry correctly stays `◀ ready` until a later minixrs commit flips it,
+per the marker convention.
+
+## M3 gate ✓ M3a passed 2026-07-30
 
 After both hand-offs: `check-image.sh` green on the SDK hello, then QEMU on
 minixrs prints the slice-5.6 hello markers from a binary built by the patched
 clang on the real triple. M3a = boot-embedded; M3b = via slice 5.9
 exec-from-FS, out of scope here.
+
+**Both conditions met.** `check-image.sh` reports `LOADABLE` on the SDK hello,
+and minixrs boots one built by `$MINIXRS_SDK/bin/clang` on the real triple with
+all five C markers and a full 72/72 marker check. M3b remains open and arrives
+with minixrs slice 5.9.
 
 ## Out of scope
 

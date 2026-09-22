@@ -4,14 +4,14 @@
 # the host, before it ever reaches QEMU.
 #
 # Mirrors `load_into` / `load_segment` in the minixrs repo's
-# kernel/src/boot_image/elf.rs, plus the user VA map. Every rule below is one
+# kernel/src/boot_image/elf.rs, and the header checks they call in
+# kernel-shared/src/execimage.rs, plus the user VA map. Every rule below is one
 # the loader enforces at boot or at exec, so a violation here is an image the
-# kernel would refuse — except the guard-page rule, which is worse: an image
-# that reaches into the stack's guard page but no further defeats it (a stack
-# overflow no longer faults) without the kernel refusing to map anything. The
-# same rule also catches images that land on the stack itself, which the
-# kernel *does* refuse (AlreadyMapped) — this check just catches that sooner,
-# on the host.
+# kernel would refuse. The VA-map ceiling is execimage.rs `segment_end`: any
+# PT_LOAD with p_vaddr + p_memsz > USER_REGION_LIMIT is BadSpan before a page
+# is mapped — a span that only reaches the stack's guard page included, which
+# would otherwise leave the guard mapped and let a stack overflow run into the
+# image instead of faulting.
 #
 # Rules checked:
 #   - ET_EXEC (a PIE/-shared default is ET_DYN → the loader's BadType) and
@@ -23,8 +23,9 @@
 #     PF_W|PF_X (WriteExec)
 #   - some PT_LOAD covers the program header table, which is what gives musl's
 #     __init_tls a usable AT_PHDR (`segment_covers_phdrs`)
-#   - no PT_LOAD reaches the stack's guard page (ceiling at USER_REGION_LIMIT)
-#     or runs past USER_VA_TOP
+#   - no PT_LOAD reaches the stack's guard page: p_vaddr + p_memsz <=
+#     USER_REGION_LIMIT (segment_end's BadSpan), zero-memsz segments included
+#   - no PT_LOAD runs past USER_VA_TOP
 #
 # Parsing is od/dd straight on the file, like check-brand.sh, so this needs no
 # toolchain at all; `llvm-readelf --program-headers` shows the same table in
@@ -175,11 +176,20 @@ check_file() {
             phdrs_covered=1
         fi
 
-        # --- the VA map ----------------------------------------------------
+        # --- the VA map: segment_end() -------------------------------------
         # The loader maps ceil(p_memsz / PAGE_SIZE) pages from p_vaddr, so a
-        # zero-memsz segment occupies nothing.
+        # zero-memsz segment occupies nothing — but segment_end() still runs
+        # for it, and p_vaddr + 0 above the ceiling is BadSpan. Test that before
+        # skipping. For p_memsz > 0 the page-rounded end below agrees with
+        # segment_end's byte end, since p_vaddr and the ceiling are both
+        # page-aligned (a misaligned p_vaddr is already reported above).
         npages=$(( (pmemsz + PAGE_SIZE - 1) / PAGE_SIZE ))
-        (( npages > 0 )) || continue
+        if (( npages == 0 )); then
+            if (( pvaddr > USER_REGION_LIMIT )); then
+                bad "PT_LOAD #$i $(hx "$pvaddr")+0x0 reaches the stack guard page at $(hx "$USER_REGION_LIMIT") (USER_REGION_LIMIT) — a zero p_memsz does not exempt it"
+            fi
+            continue
+        fi
         vend=$(( pvaddr + npages * PAGE_SIZE ))
 
         if (( vend > USER_REGION_LIMIT )); then

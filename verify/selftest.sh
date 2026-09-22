@@ -9,8 +9,9 @@
 #   unbranded.s  → exit 1 (missing brand)
 #   badabi.s     → exit 2 (unsupported abi_version)
 #
-# check-image.sh, the kernel loader's rules. All seven link branded.s and
-# vary only the link, so each fixture violates exactly one rule (or none):
+# check-image.sh, the kernel loader's rules. All eight link branded.s and
+# vary only the link (the last also rewrites one header), so each fixture
+# violates exactly one rule (or none):
 #
 #   --image-base=0x100000   → exit 0  (repo-built minixrs images still use
 #                              this base; well clear of USER_REGION_LIMIT)
@@ -32,8 +33,13 @@
 #                              USER_REGION_LIMIT catches; the earlier V14
 #                              draft's ceiling at USER_STACK_BASE
 #                              (0x3FFF0000) would not)
+#   PT_GNU_STACK → PT_LOAD  → exit 1  (image-empty-load: a zero-memsz PT_LOAD
+#                              at 0x3FFF0000, rewritten in after an
+#                              --image-base=0x100000 link since lld never emits
+#                              one; segment_end still refuses p_vaddr + 0 past
+#                              USER_REGION_LIMIT, so the check must not skip it)
 #
-# Those seven link with the same -z flags the MinixRS driver passes
+# Those eight link with the same -z flags the MinixRS driver passes
 # (docs/sysroot-layout.md), because without them lld packs loadable segments
 # so that only p_offset ≡ p_vaddr (mod page) holds — neither is page-aligned,
 # and every fixture would "fail" for *that* rather than the rule under test.
@@ -131,7 +137,53 @@ expect_image() { # <label> <expected rc> <expected reason> <fixture> [ld args...
     # ${ARR[@]+…} guard: macOS bash 3.2 treats "${ARR[@]}" on an empty array as
     # an unbound variable under `set -u` (CLAUDE.md).
     link "$label" "$src" ${ZFLAGS[@]+"${ZFLAGS[@]}"} "$@"
+    verdict "$label" "$want_rc" "$want_msg"
+}
 
+# Hand-built headers for what lld never emits. Rewrites the image's PT_GNU_STACK
+# header — all-zero offset/filesz/memsz, flags RW — into a PT_LOAD at <vaddr>, so
+# the result is a zero-memsz PT_LOAD that breaks no other rule.
+le_bytes() { # <value> <width in bytes> — little-endian, as printf escapes
+    local v="$1" n="$2" out=""
+    while (( n-- > 0 )); do
+        out="$out$(printf '\\x%02x' $(( v & 0xff )))"
+        v=$(( v >> 8 ))
+    done
+    printf '%s' "$out"
+}
+
+poke() { # <file> <offset> <value> <width>
+    # shellcheck disable=SC2059 # the format *is* the byte string
+    printf "$(le_bytes "$3" "$4")" | dd of="$1" bs=1 seek="$2" conv=notrunc 2>/dev/null
+}
+
+gnu_stack_to_load() { # <elf> <vaddr>
+    local f="$1" phoff phnum i ph
+    phoff="$(od -A n -N 8 -j 32 -t u8 "$f" | tr -d ' \t\n')"
+    phnum="$(od -A n -N 2 -j 56 -t u2 "$f" | tr -d ' \t\n')"
+    for (( i = 0; i < phnum; i++ )); do
+        ph=$(( phoff + i * 56 ))
+        if [ "$(od -A n -N 4 -j "$ph" -t u4 "$f" | tr -d ' \t\n')" -eq $(( 0x6474e551 )) ]; then
+            poke "$f" "$ph" 1 4               # p_type = PT_LOAD
+            poke "$f" $(( ph + 16 )) "$2" 8   # p_vaddr
+            poke "$f" $(( ph + 24 )) "$2" 8   # p_paddr
+            return 0
+        fi
+    done
+    echo "selftest: no PT_GNU_STACK header to rewrite in $f" >&2
+    return 1
+}
+
+expect_zero_load() { # <label> <expected rc> <expected reason> <vaddr> <fixture> [ld args...]
+    local label="$1" want_rc="$2" want_msg="$3" vaddr="$4" src="$5"
+    shift 5
+    link "$label" "$src" ${ZFLAGS[@]+"${ZFLAGS[@]}"} "$@"
+    gnu_stack_to_load "$tmp/$label.elf" "$vaddr" || { fail=1; return; }
+    verdict "$label" "$want_rc" "$want_msg"
+}
+
+verdict() { # <label> <expected rc> <expected reason> — run check-image.sh on $tmp/<label>.elf
+    local label="$1" want_rc="$2" want_msg="$3"
     local out rc=0
     out="$("$CHECK_IMAGE" "$tmp/$label.elf" 2>&1)" || rc=$?
 
@@ -167,6 +219,8 @@ expect_image image-misaligned 1 "is not 4096-byte aligned"       branded \
 expect_image image-on-stack   1 "reaches the stack guard page"   branded --image-base=0x3FFF0000
 expect_image image-on-guard   1 ",0x3fff0000) reaches the stack guard page" branded \
     -T "$SCRIPT_DIR/testdata/guard.ld"
+expect_zero_load image-empty-load 1 "0x3fff0000+0x0 reaches the stack guard page" 0x3FFF0000 \
+    branded --image-base=0x100000
 
 if [ "$fail" -eq 0 ]; then
     echo "selftest: all fixtures passed"

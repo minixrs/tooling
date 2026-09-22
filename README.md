@@ -116,10 +116,10 @@ same `◀ next` / `◀ ready` / `✓ shipped` markers the minixrs repo uses.
 | P1 / M1 triple + branding (minixrs repo) | ✓ shipped (PR #44) |
 | P2a llvm fork bring-up | ✓ shipped |
 | P2b / M2 LLVM patch series | ✓ shipped (PR #1) — [docs/plans/llvm-m2.md](docs/plans/llvm-m2.md) |
-| P3 / M3 sysroot | ✓ shipped — [docs/plans/musl-m3.md](docs/plans/musl-m3.md); P3a (PR #3), P3b (LLVM patch 0006, PR #4), P3c (minixrs PR #50). **M3a closed**; M3b rides with minixrs slice 5.9 |
+| P3 / M3 sysroot | ✓ shipped — [docs/plans/musl-m3.md](docs/plans/musl-m3.md); P3a (PR #3), P3b (LLVM patch 0006, PR #4), P3c (minixrs PR #50). **M3a closed**; M3b rides with minixrs slice 5.9. P3d ◀ ready (branch feature/user-va-map, pending merge) — drops the 0006 pin for minixrs's new user VA map |
 | **P4 / M4–M5 std PAL + rustup** | **◀ next** — the slice 5.6 ABI freeze it needs is in effect |
 
 `patches/*/` is `git format-patch` output, re-exported by
-`scripts/export-patches.sh` after every fork rebase. `llvm/` holds 6 patches
-(0001–0005 from P2b, 0006 the P3b image base) and `musl/` the port series; the
-rest stay empty until their fork exists.
+`scripts/export-patches.sh` after every fork rebase. `llvm/` holds 5 patches
+(0001–0005 from P2b; 0006, the P3b image base, was dropped by P3d) and
+`musl/` the port series; the rest stay empty until their fork exists.

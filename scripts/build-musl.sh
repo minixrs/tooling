@@ -18,7 +18,9 @@
 #     for aarch64's IEEE-quad long double) come from compiler-rt via
 #     build-compiler-rt.sh, not from a -Zbuild-std compiler_builtins rlib.
 #   - No linker script. lld's default layout already satisfies the kernel
-#     loader; only the image base needs pinning, and the driver does that.
+#     loader; nothing needs pinning (the driver's old --image-base pin was
+#     dropped at P3d — minixrs moved its initial stack off lld's default
+#     base, see docs/sysroot-layout.md).
 #
 # Run scripts/build-llvm.sh and scripts/build-compiler-rt.sh first.
 #

@@ -37,11 +37,11 @@ A work PR marks its **own** item `◀ ready (branch …, pending merge)`, never
 gate over trusting a marker:
 
 ```sh
-verify/selftest.sh          # brand + image fixtures, needs no SDK — 7 fixtures
+verify/selftest.sh          # brand + image fixtures, needs no SDK — 9 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
-ls patches/llvm/*.patch     # 6 files (0001-0005 M2, 0006 the image base)
+ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
 ```
 
 ## Cross-repo rule

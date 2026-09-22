@@ -234,6 +234,24 @@ itself is not rebuilt by this PR either — see
 `~/src/minixrs/docs/superpowers/plans/2026-09-19-user-va-map-tooling.md` for
 the full ordering and hand-off.
 
+**Do not merge this branch until minixrs PR #60 has merged.** Merging early
+leaves the pin dropped while the running kernel still maps its initial stack
+at `0x0020_0000`: `verify/check-image.sh` would happily pass an SDK image
+linked at that address as LOADABLE, and `scripts/build-sysroot.sh` uses
+`check-image.sh` as its install gate — so the gate would wave through, and
+install, exactly the image class it exists to catch.
+
+Still owed, in order, before P3d can flip to `✓ shipped`:
+
+1. Drop the 0006 commit from the `llvm-minixrs` fork branch, force-push, and
+   re-run `scripts/export-patches.sh llvm`.
+2. Rebuild the SDK: clang without 0006, then the musl sysroot.
+3. Re-run `verify/check-driver.sh` and `verify/check-image.sh` over both the
+   rebuilt SDK's images and the minixrs repo's own images.
+4. Re-run the minixrs three-boot matrix against the rebuilt SDK.
+
+P3d stays `◀ ready` until all four are done.
+
 The fork: `minixrs/musl-minixrs`, branch **`minixrs`** (the default; `main` is a
 pristine upstream mirror, never committed to), based on tag **v1.2.6**. Its
 whole delta is 7 files — `arch/aarch64/syscall_arch.h`,
@@ -279,11 +297,12 @@ against the installed SDK rather than assumed:
   now sits at the top of user VA rather than at lld's default base.
   `verify/check-image.sh` is what turns a bad image into a one-second host
   check instead of a QEMU hang.
-- **The exec stack is one 4 KiB page.** Measured sufficient (~2 KB worst chain)
-  and deliberately not grown — but v1.2.6's `fmt_fp` allocates a **VLA**,
-  ~512 B for `%f` and **~7.4 KB for `%Lf`**, so the first C program printing a
-  `long double` overflows it. No static frame scan predicts that. **Still
-  live** — nothing in the SDK flavor changes it.
+- **The exec stack was one 4 KiB page.** Measured sufficient (~2 KB worst
+  chain) and deliberately not grown — but v1.2.6's `fmt_fp` allocates a
+  **VLA**, ~512 B for `%f` and **~7.4 KB for `%Lf`**, so the first C program
+  printing a `long double` overflowed it. No static frame scan predicts that.
+  **Resolved with P3d / minixrs PR #60** — it grows the initial stack to
+  16 pages (64 KiB, spec V2), which clears the `%Lf` VLA with wide margin.
 
 **M3 gate**: branded C hello world exec'd on minixrs, built by the **patched
 clang on the real triple**. M3a = boot-embedded; M3b = via slice 5.9

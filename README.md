@@ -88,9 +88,9 @@ verify/selftest.sh                       # builds fixtures, checks all verdicts
 ```
 
 `check-image.sh` mirrors the minixrs kernel's ELF loader — `ET_EXEC`,
-page-aligned `PT_LOAD`s, `AT_PHDR` reachable, W^X, and clear of the stack page
-and device window — so a bad image fails in a second on the host instead of
-hanging in QEMU.
+page-aligned `PT_LOAD`s, `AT_PHDR` reachable, W^X, and clear of the stack
+guard page (`USER_REGION_LIMIT`) — so a bad image fails in a second on the
+host instead of hanging in QEMU.
 
 The build scripts fail fast with a "clone X first" message until the
 corresponding fork exists (see the roadmap for sequencing), and point at

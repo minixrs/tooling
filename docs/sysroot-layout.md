@@ -53,8 +53,9 @@ $MINIXRS_SDK/
   `-z max-page-size=4096 -z separate-loadable-segments` (minixrs D13) so the
   kernel's loader constraints (page-aligned vaddr *and* file offset per
   PT_LOAD) always hold.
-- **The driver pins no image base.** SDK-built images link at lld's aarch64
-  default, `0x0020_0000`; minixrs repo-built images keep `0x0010_0000` via
+- **The driver pins no image base** (from the first SDK built without patch
+  0006, P3d). SDK-built images link at lld's aarch64 default, `0x0020_0000`;
+  minixrs repo-built images keep `0x0010_0000` via
   their own `servers/*/user.ld` / `userland/*/user.ld`. Both bases are
   correct at once — each process has its own TTBR0, so nothing collides
   across processes. What the kernel loader actually requires, and what

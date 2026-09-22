@@ -9,14 +9,18 @@
 #   unbranded.s  → exit 1 (missing brand)
 #   badabi.s     → exit 2 (unsupported abi_version)
 #
-# check-image.sh, the kernel loader's rules. All six link branded.s and vary
-# only the link, so each fixture violates exactly one rule (or none):
+# check-image.sh, the kernel loader's rules. All seven link branded.s and
+# vary only the link, so each fixture violates exactly one rule (or none):
 #
 #   --image-base=0x100000   → exit 0  (repo-built minixrs images still use
 #                              this base; well clear of USER_REGION_LIMIT)
 #   lld's default base      → exit 0  (0x200000 — what SDK images use now
 #                              that LLVM patch 0006's --image-base pin is
 #                              gone; also well clear of USER_REGION_LIMIT)
+#   testdata/at-limit.ld    → exit 0  (image-at-limit: the PT_LOAD's end
+#                              lands exactly on USER_REGION_LIMIT — the
+#                              boundary itself is still LOADABLE, only
+#                              strictly past it is not)
 #   -pie                    → exit 1  (ET_DYN, the loader's BadType)
 #   testdata/misaligned.ld  → exit 1  (a PT_LOAD off 4 KiB alignment)
 #   --image-base=0x3FFF0000 → exit 1  (image-on-stack: PT_LOADs land at and
@@ -25,10 +29,11 @@
 #                              lands exactly on USER_REGION_LIMIT + PAGE_SIZE
 #                              — it reaches the guard page but touches no
 #                              stack page, which only the current ceiling at
-#                              USER_REGION_LIMIT catches; the superseded
-#                              ceiling at the old stack VA would not)
+#                              USER_REGION_LIMIT catches; the earlier V14
+#                              draft's ceiling at USER_STACK_BASE
+#                              (0x3FFF0000) would not)
 #
-# Those six link with the same -z flags the MinixRS driver passes
+# Those seven link with the same -z flags the MinixRS driver passes
 # (docs/sysroot-layout.md), because without them lld packs loadable segments
 # so that only p_offset ≡ p_vaddr (mod page) holds — neither is page-aligned,
 # and every fixture would "fail" for *that* rather than the rule under test.
@@ -37,9 +42,10 @@
 # alone still yields 64 KiB-aligned (hence 4 KiB-aligned) segments.
 #
 # Each image expectation therefore asserts the reported reason, not just the
-# exit code — image-base-1m is still the sentinel that catches these -z flags
-# drifting out of sync with the driver: it is the fixture whose LOADABLE
-# verdict depends on the -z flags alone, with no VA-map rule doing the work.
+# exit code — the LOADABLE fixtures (image-base-1m, image-default) are the
+# sentinels that catch these -z flags drifting out of sync with the driver:
+# each is a fixture whose LOADABLE verdict depends on the -z flags alone,
+# with no VA-map rule doing the work.
 #
 # Needs a clang able to emit aarch64 ELF objects (any Apple or LLVM clang)
 # and a GNU-flavor lld: ld.lld from $MINIXRS_SDK/bin, PATH, or Homebrew LLVM,
@@ -153,11 +159,13 @@ expect badabi 2
 
 expect_image image-base-1m    0 "LOADABLE"                       branded --image-base=0x100000
 expect_image image-default    0 "LOADABLE"                       branded # lld's default 0x200000 — what SDK images now use
+expect_image image-at-limit   0 "LOADABLE"                       branded \
+    -T "$SCRIPT_DIR/testdata/at-limit.ld"
 expect_image image-pie        1 "not ET_EXEC"                    branded -pie
 expect_image image-misaligned 1 "is not 4096-byte aligned"       branded \
     -T "$SCRIPT_DIR/testdata/misaligned.ld"
 expect_image image-on-stack   1 "reaches the stack guard page"   branded --image-base=0x3FFF0000
-expect_image image-on-guard   1 "reaches the stack guard page"   branded \
+expect_image image-on-guard   1 ",0x3fff0000) reaches the stack guard page" branded \
     -T "$SCRIPT_DIR/testdata/guard.ld"
 
 if [ "$fail" -eq 0 ]; then

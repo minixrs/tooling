@@ -4,8 +4,8 @@
  * (kernel/src/boot_image/elf.rs `load_segment`) has something to catch.
  *
  * Everything else about the resulting image stays valid — ET_EXEC, base
- * 0x100000, program headers covered by the first PT_LOAD, clear of the stack
- * page at 0x200000 — so the fixture fails for the alignment rule alone and
+ * 0x100000, program headers covered by the first PT_LOAD, well below
+ * USER_REGION_LIMIT — so the fixture fails for the alignment rule alone and
  * not incidentally.
  */
 SECTIONS {

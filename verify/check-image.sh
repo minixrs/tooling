@@ -7,8 +7,11 @@
 # kernel/src/boot_image/elf.rs, plus the user VA map. Every rule below is one
 # the loader enforces at boot or at exec, so a violation here is an image the
 # kernel would refuse — except the guard-page rule, which is worse: an image
-# that reaches into the stack's guard page defeats it (a stack overflow no
-# longer faults) without the kernel refusing to map anything.
+# that reaches into the stack's guard page but no further defeats it (a stack
+# overflow no longer faults) without the kernel refusing to map anything. The
+# same rule also catches images that land on the stack itself, which the
+# kernel *does* refuse (AlreadyMapped) — this check just catches that sooner,
+# on the host.
 #
 # Rules checked:
 #   - ET_EXEC (a PIE/-shared default is ET_DYN → the loader's BadType) and

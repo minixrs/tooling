@@ -149,6 +149,8 @@ are the failure mode here: the scripts are mostly preconditions.
 - Fork branches are **rebase-maintained and force-pushed**. Review happens
   over the exported series in `patches/`, not via PRs against fork branches;
   re-run `scripts/export-patches.sh <fork>` after every rebase.
+- **Dropping a patch is a fork operation.** `patches/` is `export-patches.sh` output, so deleting a
+  `.patch` file only lasts until the next export — the commit must leave the fork branch (a force-push).
 - **Seed fork clones from an existing checkout.** `git clone --reference <checkout>
   --dissociate --branch <tag> --single-branch` cut llvm-project to ~90 s. A GitHub org
   fork shares object storage with upstream, so `gh repo fork` costs no upload and the
@@ -156,6 +158,10 @@ are the failure mode here: the scripts are mostly preconditions.
 - **Plan docs can carry stale upstream facts.** `docs/plans/llvm-m2.md` originally warned
   of a `Triple::Minix` parse collision that no longer exists at the pinned LLVM. Verify
   such claims against the actual checkout before implementing.
+- **A hand-off plan from minixrs can lag its own spec.** Read the spec's current text on the
+  minixrs branch before implementing; the spec wins where they differ.
+- **`shellcheck -S warning` fails on unused variables (SC2034).** A constant copied from minixrs
+  that no check reads belongs in a comment, not an assignment.
 - **FileCheck `-NOT` only scans the gaps *between* positive matches.** Text a positive
   pattern consumed is never examined — and a wildcard like `{{[^"]*}}` will happily
   swallow the exact spelling you are excluding. Put whole-output negatives in their own

@@ -230,39 +230,27 @@ probes exactly three files (`bin/clang`, `sysroot/.stamp`,
 `lib/clang/<ver>` resource dir: the driver names those, and the version
 component must stay derived rather than hard-coded.
 
-**P3d drops P3b's pin.** minixrs's user VA map moves the initial user stack
-off `0x0020_0000` — 16 pages now sit at the top of user VA,
+**P3d drops P3b's pin.** minixrs's user VA map moves the initial user stack off
+`0x0020_0000` — 16 pages now sit at the top of user VA,
 `[0x3FFF_0000, 0x4000_0000)`, with a guard page below them and
-`USER_REGION_LIMIT = 0x3FFE_F000` as the ceiling for any mapping (all in
-minixrs `kernel-shared/src/uspace.rs`). That was the pin's only reason to
-exist, so LLVM patch 0006 (`--image-base=0x100000`) is dropped: SDK-built
-images now link at lld's aarch64 default, `0x0020_0000`; minixrs repo-built
-images keep `0x0010_0000` via their own `servers/*/user.ld` /
-`userland/*/user.ld`. Both bases are correct at once — each process has its
-own TTBR0. Ordering is load-bearing (minixrs spec
-`~/src/minixrs/docs/superpowers/specs/2026-09-19-user-va-map-design.md` §5,
-V12): minixrs PR #60 must merge and the stack must actually move before any
-SDK rebuilt without the pin is used, or SDK images link straight onto the
-old stack page and fail with a silent `ENOEXEC`/`ENOMEM`. PR #6 landed
-only the *tooling*-side half: it deleted the exported patch, moved
-`verify/check-image.sh` onto the new ceiling (`vend > USER_REGION_LIMIT`, plus
-`segment_end`'s refusal of a zero-`p_memsz` `PT_LOAD` above it), added the
-`image-at-limit` / `image-on-guard` / `image-empty-load` fixtures, and updated
-the docs that named the pin.
-The fork-side half (removing the 0006 commit from the `llvm-minixrs` branch,
-force-pushing, and re-running `scripts/export-patches.sh llvm`) is not done, and
-until it is, `export-patches.sh` would regenerate 0006 from the fork branch. The
-SDK is not rebuilt yet either — see
-`~/src/minixrs/docs/superpowers/plans/2026-09-19-user-va-map-tooling.md` for the
-full ordering and hand-off, and [Open work](#open-work) for what is left.
+`USER_REGION_LIMIT = 0x3FFE_F000` as the ceiling for any mapping (all in minixrs
+`kernel-shared/src/uspace.rs`). That was the pin's only reason to exist, so LLVM
+patch 0006 (`--image-base=0x100000`) goes: SDK-built images link at lld's
+aarch64 default, `0x0020_0000`, and minixrs repo-built images keep `0x0010_0000`
+via their own `servers/*/user.ld` / `userland/*/user.ld`. Both bases are correct
+at once — each process has its own TTBR0. `verify/check-image.sh` mirrors the new
+ceiling and asserts no particular base.
 
-The ordering held: minixrs PR #60 merged first, on 2026-09-28, before the
-tooling half. The other direction would have left the pin dropped while the
-running kernel still mapped its initial stack at `0x0020_0000` —
-`verify/check-image.sh` would pass an SDK image linked at that address as
-LOADABLE, and `scripts/build-sysroot.sh` uses `check-image.sh` as its install
-gate, so the gate would have installed exactly the image class it exists to
-catch.
+**The order is load-bearing** (minixrs spec
+`~/src/minixrs/docs/superpowers/specs/2026-09-19-user-va-map-design.md` §5, V12):
+the stack has to move before any SDK built without the pin is used, or SDK images
+link straight onto the old stack page. The failure is silent: a
+kernel still mapping its stack at `0x0020_0000` refuses such an image with
+`ENOEXEC`/`ENOMEM` and nothing else, while `check-image.sh` — which
+`scripts/build-sysroot.sh` gates installs on — reads the address as ordinary and
+installs it. minixrs landed first, so that hazard is behind us.
+`~/src/minixrs/docs/superpowers/plans/2026-09-19-user-va-map-tooling.md` carries
+the full hand-off.
 
 The fork: `minixrs/musl-minixrs`, branch **`minixrs`** (the default; `main` is a
 pristine upstream mirror, never committed to), based on tag **v1.2.6**. Its

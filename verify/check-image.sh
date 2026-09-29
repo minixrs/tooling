@@ -4,11 +4,14 @@
 # the host, before it ever reaches QEMU.
 #
 # Mirrors `load_into` / `load_segment` in the minixrs repo's
-# kernel/src/boot_image/elf.rs, plus the user VA map. Every rule below is one
+# kernel/src/boot_image/elf.rs, and the header checks they call in
+# kernel-shared/src/execimage.rs, plus the user VA map. Every rule below is one
 # the loader enforces at boot or at exec, so a violation here is an image the
-# kernel would refuse — except the stack-overlap rule, which is worse: the
-# kernel maps the image happily and then hands the process a stack on top of
-# its own text.
+# kernel would refuse. The VA-map ceiling is execimage.rs `segment_end`: any
+# PT_LOAD with p_vaddr + p_memsz > USER_REGION_LIMIT is BadSpan before a page
+# is mapped — a span that only reaches the stack's guard page included, which
+# would otherwise leave the guard mapped and let a stack overflow run into the
+# image instead of faulting.
 #
 # Rules checked:
 #   - ET_EXEC (a PIE/-shared default is ET_DYN → the loader's BadType) and
@@ -20,8 +23,9 @@
 #     PF_W|PF_X (WriteExec)
 #   - some PT_LOAD covers the program header table, which is what gives musl's
 #     __init_tls a usable AT_PHDR (`segment_covers_phdrs`)
-#   - no PT_LOAD overlaps the stack page, reaches the device window, or runs
-#     past USER_VA_TOP
+#   - no PT_LOAD reaches the stack's guard page: p_vaddr + p_memsz <=
+#     USER_REGION_LIMIT (segment_end's BadSpan), zero-memsz segments included
+#   - no PT_LOAD runs past USER_VA_TOP
 #
 # Parsing is od/dd straight on the file, like check-brand.sh, so this needs no
 # toolchain at all; `llvm-readelf --program-headers` shows the same table in
@@ -56,9 +60,12 @@ PF_W=2
 # (No `_` digit separators: bash arithmetic parses those as variable names,
 # unlike the Rust sources these mirror.)
 PAGE_SIZE=4096                      # kernel-shared/src/message.rs USER_PAGE_SIZE
-STACK_VA=$((0x200000))              # kernel/src/arch/aarch64/userland.rs SERVER_STACK_VA
-STACK_PAGES=1                       # userland.rs maps exactly one page there
-DEVICE_WINDOW_BASE=$((0x40000000))  # kernel-shared/src/uspace.rs USER_DEVICE_WINDOW_BASE
+# USER_STACK_BASE (0x3FFF_0000) minus USER_STACK_GUARD_BYTES, one unmapped
+# guard page below the 16-page initial stack. The stack itself runs from
+# USER_STACK_BASE up to USER_STACK_TOP, which == USER_DEVICE_WINDOW_BASE
+# (0x4000_0000) — so this one ceiling also keeps images out of the device
+# window, with no separate check needed for that.
+USER_REGION_LIMIT=$((0x3FFEF000))   # kernel-shared/src/uspace.rs USER_REGION_LIMIT
 USER_VA_TOP=$((1 << 48))            # kernel-shared/src/message.rs USER_VA_TOP
 
 die() { echo "check-image: error: $*" >&2; exit 3; }
@@ -169,18 +176,24 @@ check_file() {
             phdrs_covered=1
         fi
 
-        # --- the VA map ----------------------------------------------------
+        # --- the VA map: segment_end() -------------------------------------
         # The loader maps ceil(p_memsz / PAGE_SIZE) pages from p_vaddr, so a
-        # zero-memsz segment occupies nothing.
+        # zero-memsz segment occupies nothing — but segment_end() still runs
+        # for it, and p_vaddr + 0 above the ceiling is BadSpan. Test that before
+        # skipping. For p_memsz > 0 the page-rounded end below agrees with
+        # segment_end's byte end, since p_vaddr and the ceiling are both
+        # page-aligned (a misaligned p_vaddr is already reported above).
         npages=$(( (pmemsz + PAGE_SIZE - 1) / PAGE_SIZE ))
-        (( npages > 0 )) || continue
+        if (( npages == 0 )); then
+            if (( pvaddr > USER_REGION_LIMIT )); then
+                bad "PT_LOAD #$i $(hx "$pvaddr")+0x0 reaches the stack guard page at $(hx "$USER_REGION_LIMIT") (USER_REGION_LIMIT) — a zero p_memsz does not exempt it"
+            fi
+            continue
+        fi
         vend=$(( pvaddr + npages * PAGE_SIZE ))
 
-        if (( pvaddr < STACK_VA + STACK_PAGES * PAGE_SIZE && vend > STACK_VA )); then
-            bad "PT_LOAD #$i [$(hx "$pvaddr"),$(hx "$vend")) overlaps the stack page at $(hx "$STACK_VA") (SERVER_STACK_VA)"
-        fi
-        if (( vend > DEVICE_WINDOW_BASE )); then
-            bad "PT_LOAD #$i [$(hx "$pvaddr"),$(hx "$vend")) reaches the device window at $(hx "$DEVICE_WINDOW_BASE")"
+        if (( vend > USER_REGION_LIMIT )); then
+            bad "PT_LOAD #$i [$(hx "$pvaddr"),$(hx "$vend")) reaches the stack guard page at $(hx "$USER_REGION_LIMIT") (USER_REGION_LIMIT)"
         fi
         if (( vend > USER_VA_TOP )); then
             bad "PT_LOAD #$i [$(hx "$pvaddr"),$(hx "$vend")) runs past USER_VA_TOP $(hx "$USER_VA_TOP")"

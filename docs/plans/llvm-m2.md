@@ -436,6 +436,10 @@ Finally `git push origin minixrs/release/22.x`.
 
 ## Step 7 — the image base (P3b) ✓ shipped (PR #4, merged 2026-07-30)
 
+> **P3d note (2026-09):** patch 0006 below was later dropped — minixrs moved
+> the initial stack off `0x0020_0000` to the top of user VA, so the collision
+> this step describes no longer exists. See `docs/roadmap.md` P3d.
+
 Roadmap phase **P3b**, not M2 — but the same fork on the same branch, so it
 appends to this series as patch **0006** rather than opening a second one.
 Design context: `tooling/docs/plans/musl-m3.md`, "The one real design finding:

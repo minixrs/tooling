@@ -31,6 +31,10 @@ by building it — `patches/musl/0001-*.patch` is unchanged by M3.
 
 ## The one real design finding: the image base
 
+> **P3d note (2026-09):** the pin below was later dropped — minixrs moved the
+> initial stack off `0x0020_0000` to the top of user VA, so the collision this
+> section describes no longer exists. See `docs/roadmap.md` P3d.
+
 lld defaults to an image base of `0x200000`. minixrs maps **every** process's
 stack page at `SERVER_STACK_VA = 0x0020_0000`
 (`kernel/src/arch/aarch64/userland.rs:144`). A default-linked SDK binary lands

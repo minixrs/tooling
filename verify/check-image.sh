@@ -5,9 +5,10 @@
 #
 # Mirrors `load_into` / `load_segment` in the minixrs repo's
 # kernel/src/boot_image/elf.rs, and the header checks they call in
-# kernel-shared/src/execimage.rs, plus the user VA map. Every rule below is one
-# the loader enforces at boot or at exec, so a violation here is an image the
-# kernel would refuse. The VA-map ceiling is execimage.rs `segment_end`: any
+# kernel-shared/src/execimage.rs, plus the user VA map. Every rule below but
+# one is a rule the loader enforces at boot or at exec, so a violation there is
+# an image the kernel would refuse. The exception is the program-header rule,
+# which is musl's, not the loader's — see --boot-module. The VA-map ceiling is execimage.rs `segment_end`: any
 # PT_LOAD with p_vaddr + p_memsz > USER_REGION_LIMIT is BadSpan before a page
 # is mapped — a span that only reaches the stack's guard page included, which
 # would otherwise leave the guard mapped and let a stack overflow run into the
@@ -22,7 +23,10 @@
 #     (Misaligned), the file range present in the file (Truncated), and never
 #     PF_W|PF_X (WriteExec)
 #   - some PT_LOAD covers the program header table, which is what gives musl's
-#     __init_tls a usable AT_PHDR (`segment_covers_phdrs`)
+#     __init_tls a usable AT_PHDR (`segment_covers_phdrs`). The loader itself
+#     treats an uncovered table as ordinary and simply reports no phdr VA; it
+#     is an exec'd musl program that then dereferences nothing. Skipped under
+#     --boot-module
 #   - no PT_LOAD reaches the stack's guard page: p_vaddr + p_memsz <=
 #     USER_REGION_LIMIT (segment_end's BadSpan), zero-memsz segments included
 #   - no PT_LOAD runs past USER_VA_TOP
@@ -31,7 +35,15 @@
 # toolchain at all; `llvm-readelf --program-headers` shows the same table in
 # human-readable form.
 #
-# Usage: check-image.sh <elf> [<elf>...]
+# Usage: check-image.sh [--boot-module] <elf> [<elf>...]
+#
+#   --boot-module  the images are minixrs boot modules (servers, drivers, mfs,
+#                  init), loaded by the kernel at boot, never exec'd, and never
+#                  handed an auxv. Their user.ld deliberately leaves the headers
+#                  unmapped (minixrs slice 5.5, userland/worker/user.ld), so the
+#                  program-header rule is dropped; every other rule still
+#                  applies. The default stays strict: an SDK image is an exec
+#                  target.
 #
 # Exit codes:
 #   0  every file satisfies every loader rule
@@ -70,7 +82,13 @@ USER_VA_TOP=$((1 << 48))            # kernel-shared/src/message.rs USER_VA_TOP
 
 die() { echo "check-image: error: $*" >&2; exit 3; }
 
-[ $# -ge 1 ] || die "usage: check-image.sh <elf> [<elf>...]"
+BOOT_MODULE=0
+if [ "${1:-}" = "--boot-module" ]; then
+    BOOT_MODULE=1
+    shift
+fi
+
+[ $# -ge 1 ] || die "usage: check-image.sh [--boot-module] <elf> [<elf>...]"
 [ -x "$CHECK_BRAND" ] || die "check-brand.sh not found next to this script"
 
 read_u16() { od -A n -N 2 -j "$2" -t u2 "$1" | tr -d ' \t\n'; }
@@ -202,7 +220,7 @@ check_file() {
 
     if (( loads == 0 )); then
         bad "no PT_LOAD segments — the loader would map nothing"
-    elif (( phdrs_covered == 0 )); then
+    elif (( phdrs_covered == 0 && BOOT_MODULE == 0 )); then
         bad "no PT_LOAD covers the program headers — AT_PHDR would be unset and musl's __init_tls dereferences it"
     fi
 

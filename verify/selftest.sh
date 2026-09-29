@@ -9,7 +9,7 @@
 #   unbranded.s  → exit 1 (missing brand)
 #   badabi.s     → exit 2 (unsupported abi_version)
 #
-# check-image.sh, the kernel loader's rules. All eight link branded.s and
+# check-image.sh, the kernel loader's rules. All nine link branded.s and
 # vary only the link (the last also rewrites one header), so each fixture
 # violates exactly one rule (or none):
 #
@@ -38,8 +38,19 @@
 #                              --image-base=0x100000 link since lld never emits
 #                              one; segment_end still refuses p_vaddr + 0 past
 #                              USER_REGION_LIMIT, so the check must not skip it)
+#   testdata/boot-module.ld → exit 1  (image-phdrs-unmapped: no PT_LOAD
+#                              covers the program headers — the shape of a
+#                              minixrs boot module, wrong for an exec'd image)
 #
-# Those eight link with the same -z flags the MinixRS driver passes
+# and two run under check-image.sh --boot-module, which drops only the
+# header-coverage rule:
+#
+#   testdata/boot-module.ld → exit 0  (boot-module: the same image is fine
+#                              for a module that never reads an auxv)
+#   --image-base=0x3FFF0000 → exit 1  (boot-module-on-stack: every other rule
+#                              still applies under the flag)
+#
+# Those eleven link with the same -z flags the MinixRS driver passes
 # (docs/sysroot-layout.md), because without them lld packs loadable segments
 # so that only p_offset ≡ p_vaddr (mod page) holds — neither is page-aligned,
 # and every fixture would "fail" for *that* rather than the rule under test.
@@ -174,6 +185,13 @@ gnu_stack_to_load() { # <elf> <vaddr>
     return 1
 }
 
+expect_boot_module() { # <label> <expected rc> <expected reason> <fixture> [ld args...]
+    local label="$1" want_rc="$2" want_msg="$3" src="$4"
+    shift 4
+    link "$label" "$src" ${ZFLAGS[@]+"${ZFLAGS[@]}"} "$@"
+    verdict "$label" "$want_rc" "$want_msg" --boot-module
+}
+
 expect_zero_load() { # <label> <expected rc> <expected reason> <vaddr> <fixture> [ld args...]
     local label="$1" want_rc="$2" want_msg="$3" vaddr="$4" src="$5"
     shift 5
@@ -182,10 +200,11 @@ expect_zero_load() { # <label> <expected rc> <expected reason> <vaddr> <fixture>
     verdict "$label" "$want_rc" "$want_msg"
 }
 
-verdict() { # <label> <expected rc> <expected reason> — run check-image.sh on $tmp/<label>.elf
+verdict() { # <label> <expected rc> <expected reason> [check-image flags...] — on $tmp/<label>.elf
     local label="$1" want_rc="$2" want_msg="$3"
+    shift 3
     local out rc=0
-    out="$("$CHECK_IMAGE" "$tmp/$label.elf" 2>&1)" || rc=$?
+    out="$("$CHECK_IMAGE" "$@" "$tmp/$label.elf" 2>&1)" || rc=$?
 
     if [ "$rc" -ne "$want_rc" ]; then
         echo "selftest: FAIL $label (exit $rc, expected $want_rc)" >&2
@@ -221,6 +240,12 @@ expect_image image-on-guard   1 ",0x3fff0000) reaches the stack guard page" bran
     -T "$SCRIPT_DIR/testdata/guard.ld"
 expect_zero_load image-empty-load 1 "0x3fff0000+0x0 reaches the stack guard page" 0x3FFF0000 \
     branded --image-base=0x100000
+expect_image image-phdrs-unmapped   1 "no PT_LOAD covers the program headers" branded \
+    -T "$SCRIPT_DIR/testdata/boot-module.ld"
+expect_boot_module boot-module      0 "LOADABLE"                       branded \
+    -T "$SCRIPT_DIR/testdata/boot-module.ld"
+expect_boot_module boot-module-on-stack 1 "reaches the stack guard page" branded \
+    --image-base=0x3FFF0000
 
 if [ "$fail" -eq 0 ]; then
     echo "selftest: all fixtures passed"

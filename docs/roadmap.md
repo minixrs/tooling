@@ -60,7 +60,7 @@ Never write a new one.
 The whole of it, in order. Detail for each lives in its phase section below.
 
 - [x] P3d (tooling half): the verifiers and docs come off the image-base pin
-- [ ] P3d (fork + SDK half): drop the 0006 commit from the `llvm-minixrs`
+- [x] P3d (fork + SDK half): drop the 0006 commit from the `llvm-minixrs`
       branch, force-push, and re-run `scripts/export-patches.sh llvm`
 - [ ] P3d: rebuild the SDK — clang without 0006, then the musl sysroot
 - [ ] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the

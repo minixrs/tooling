@@ -62,8 +62,8 @@ The whole of it, in order. Detail for each lives in its phase section below.
 - [x] P3d (tooling half): the verifiers and docs come off the image-base pin
 - [x] P3d (fork + SDK half): drop the 0006 commit from the `llvm-minixrs`
       branch, force-push, and re-run `scripts/export-patches.sh llvm`
-- [ ] P3d: rebuild the SDK — clang without 0006, then the musl sysroot
-- [ ] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the
+- [x] P3d: rebuild the SDK — clang without 0006, then the musl sysroot
+- [x] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the
       rebuilt SDK's images and the minixrs repo's own images
 - [ ] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
 - [ ] P4 / M4–M5: Rust std — libc-minixrs, then rust-minixrs, then the rustup

@@ -33,23 +33,41 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 
 ## Status markers
 
-Same convention as the minixrs repo (`docs/plan.md` / `docs/plans/*`), so the
-two trackers read alike:
+**Status is a GFM checkbox and nothing else**, the same convention the minixrs
+repo settled on in its `docs/conventions/git-and-prs.md`, so both trackers read
+alike:
 
-- `◀ next` — unstarted, and the thing to pick up next (only one at a time)
-- `◀ ready (branch …, pending merge)` — implemented but unmerged
-- `✓ shipped (PR #N, merged YYYY-MM-DD)` — merged
+- `- [ ]` unstarted, `- [x]` done. **The first unchecked box in the order below
+  is what to pick up next** — there is no `◀ next` pointer to slide, and no
+  `◀ ready (pending merge)` state to go stale.
+- A PR checks its **own** box, in the same PR as the work — never a follow-up
+  commit, never a cleanup left for the next change. Those are the shapes that
+  rot: this repo carried a marker naming an already-deleted branch for exactly
+  that reason.
+- No PR number, no merge date, no branch name. `git log` and the PR list answer
+  those better than a hand-maintained line does.
+- Status lives here only. `docs/plans/*.md` carry detail and README.md links
+  here; neither repeats a status.
 
-This repo runs a PR workflow as of PR #1, so entries use
-`✓ shipped (PR #N, merged YYYY-MM-DD)`. Entries predating it keep the
-`✓ shipped (commit <sha>, YYYY-MM-DD)` form they landed with — P0 and P2a went
-straight to `main`. Items owned by another repo keep that repo's form (M1
-shipped as minixrs PR #44).
+Lines in the older form — `✓ shipped (PR #N, merged YYYY-MM-DD)`, or
+`✓ shipped (commit <sha>, …)` from P0 and P2a, which went straight to `main`
+before the PR workflow — are **retired-form history** in the phase sections
+below, kept because rewriting them would churn several files to no benefit.
+Never write a new one.
 
-Flip the previous item forward and slide `◀ next` ahead as part of each
-change, in **both** the phase graph below and the matching `plans/` detail
-file. Reconcile stale `◀ ready` markers against `git log` when opening new
-work — "pending merge" labels on already-merged work accumulate otherwise.
+## Open work
+
+The whole of it, in order. Detail for each lives in its phase section below.
+
+- [x] P3d (tooling half): the verifiers and docs come off the image-base pin
+- [ ] P3d (fork + SDK half): drop the 0006 commit from the `llvm-minixrs`
+      branch, force-push, and re-run `scripts/export-patches.sh llvm`
+- [ ] P3d: rebuild the SDK — clang without 0006, then the musl sysroot
+- [ ] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the
+      rebuilt SDK's images and the minixrs repo's own images
+- [ ] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
+- [ ] P4 / M4–M5: Rust std — libc-minixrs, then rust-minixrs, then the rustup
+      link (four steps, detailed in the P4 section)
 
 ## Phase graph
 
@@ -58,8 +76,8 @@ P0  tooling bootstrap (this repo)                            ✓ shipped (commit
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
 P2b [llvm-minixrs] M2: the patch series — triple + driver    ✓ shipped (PR #1, merged 2026-07-26)
-P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ✓ shipped — P3a (PR #3), P3b (PR #4), P3c (minixrs PR #50); M3a closed. P3d ◀ ready (branch feature/user-va-map, pending merge) — drops the image-base pin
-P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   ◀ next — the slice 5.6 ABI freeze is in effect; M3b rides with minixrs slice 5.9
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ✓ shipped — P3a (PR #3), P3b (PR #4), P3c (minixrs PR #50); M3a closed. P3d drops the image-base pin — boxes above
+P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   boxes above; the slice 5.6 ABI freeze is in effect, M3b rides with minixrs slice 5.9
 P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
 ```
 
@@ -176,15 +194,16 @@ milestone A was reached — but **through the stand-in triple**
 meant reproducing that through the SDK on the real `aarch64-unknown-minixrs`
 triple. The port itself was never the remaining work; the toolchain flavor was.
 
-Three parts, in three repos, landed M3a; a fourth, P3d, follows to drop the
-image-base pin once minixrs's user VA map change lands:
+Three parts, in three repos, landed M3a. A fourth, **P3d**, drops the
+image-base pin now that minixrs's user VA map change has landed — it is not in
+this table because it is not finished; its boxes are under
+[Open work](#open-work).
 
 | Part | Status |
 |---|---|
 | **P3a** [tooling] the SDK sysroot: `build-musl.sh`, `build-sysroot.sh`, `verify/check-image.sh` | ✓ shipped (PR #3, merged 2026-07-27) |
 | **P3b** [llvm-minixrs] patch 0006: pin the image base at `0x0010_0000` | ✓ shipped (PR #4, merged 2026-07-30) |
 | **P3c** [minixrs] `kernel/build.rs` consumes `$MINIXRS_SDK` | ✓ shipped (minixrs PR #50, merged 2026-07-30) |
-| **P3d** [llvm-minixrs + tooling] drop the image-base pin (minixrs user VA map) | ◀ ready (branch feature/user-va-map, pending merge) — gated on minixrs PR #60 merging first; fork-side drop of 0006 + SDK rebuild still owed |
 
 **M3a is closed.** minixrs now boots a `hello` built by the patched clang from a
 single driver invocation on the real triple: entry `0x101000`, four page-aligned
@@ -224,33 +243,26 @@ own TTBR0. Ordering is load-bearing (minixrs spec
 `~/src/minixrs/docs/superpowers/specs/2026-09-19-user-va-map-design.md` §5,
 V12): minixrs PR #60 must merge and the stack must actually move before any
 SDK rebuilt without the pin is used, or SDK images link straight onto the
-old stack page and fail with a silent `ENOEXEC`/`ENOMEM`. This tooling PR
-only drops the *tooling*-side half — the exported patch and the docs that
-named it; the fork-side half (removing the 0006 commit from the
-`llvm-minixrs` branch, force-pushing, and re-running
-`scripts/export-patches.sh llvm`) is not done yet, and until it is,
-`export-patches.sh` would regenerate 0006 from the fork branch. The SDK
-itself is not rebuilt by this PR either — see
-`~/src/minixrs/docs/superpowers/plans/2026-09-19-user-va-map-tooling.md` for
-the full ordering and hand-off.
+old stack page and fail with a silent `ENOEXEC`/`ENOMEM`. PR #6 landed
+only the *tooling*-side half: it deleted the exported patch, moved
+`verify/check-image.sh` onto the new ceiling (`vend > USER_REGION_LIMIT`, plus
+`segment_end`'s refusal of a zero-`p_memsz` `PT_LOAD` above it), added the
+`image-at-limit` / `image-on-guard` / `image-empty-load` fixtures, and updated
+the docs that named the pin.
+The fork-side half (removing the 0006 commit from the `llvm-minixrs` branch,
+force-pushing, and re-running `scripts/export-patches.sh llvm`) is not done, and
+until it is, `export-patches.sh` would regenerate 0006 from the fork branch. The
+SDK is not rebuilt yet either — see
+`~/src/minixrs/docs/superpowers/plans/2026-09-19-user-va-map-tooling.md` for the
+full ordering and hand-off, and [Open work](#open-work) for what is left.
 
-**Do not merge this branch until minixrs PR #60 has merged.** Merging early
-leaves the pin dropped while the running kernel still maps its initial stack
-at `0x0020_0000`: `verify/check-image.sh` would happily pass an SDK image
-linked at that address as LOADABLE, and `scripts/build-sysroot.sh` uses
-`check-image.sh` as its install gate — so the gate would wave through, and
-install, exactly the image class it exists to catch.
-
-Still owed, in order, before P3d can flip to `✓ shipped`:
-
-1. Drop the 0006 commit from the `llvm-minixrs` fork branch, force-push, and
-   re-run `scripts/export-patches.sh llvm`.
-2. Rebuild the SDK: clang without 0006, then the musl sysroot.
-3. Re-run `verify/check-driver.sh` and `verify/check-image.sh` over both the
-   rebuilt SDK's images and the minixrs repo's own images.
-4. Re-run the minixrs three-boot matrix against the rebuilt SDK.
-
-P3d stays `◀ ready` until all four are done.
+The ordering held: minixrs PR #60 merged first, on 2026-09-28, before the
+tooling half. The other direction would have left the pin dropped while the
+running kernel still mapped its initial stack at `0x0020_0000` —
+`verify/check-image.sh` would pass an SDK image linked at that address as
+LOADABLE, and `scripts/build-sysroot.sh` uses `check-image.sh` as its install
+gate, so the gate would have installed exactly the image class it exists to
+catch.
 
 The fork: `minixrs/musl-minixrs`, branch **`minixrs`** (the default; `main` is a
 pristine upstream mirror, never committed to), based on tag **v1.2.6**. Its

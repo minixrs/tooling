@@ -40,6 +40,11 @@ merged YYYY-MM-DD)`. Flip each step's marker as it lands. This file feeds
 steps are only partly implemented, since the three-marker convention has no
 in-progress state and these per-step markers carry that granularity.
 
+> **Retired convention.** The paragraph above describes the old
+> `◀ next` / `◀ ready` / `✓ shipped` markers. Status is now a GFM checkbox in
+> `docs/roadmap.md` only, and plan files carry none — see CLAUDE.md. Kept as the
+> record of how this series was tracked while it shipped.
+
 ## Preconditions
 
 - Branch `minixrs/release/22.x`, based on tag **`llvmorg-22.1.8`**

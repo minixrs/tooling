@@ -10,28 +10,22 @@ compiler or OS source.
 
 ## Planning docs and status markers
 
-Status lives in `docs/roadmap.md` (phase graph + per-phase sections) and
-`docs/plans/*.md` (per-milestone detail). Same three markers as the minixrs
-repo, so both trackers read alike:
+Status lives in `docs/roadmap.md` and nowhere else. `docs/plans/*.md` carry
+per-milestone *detail*, and README.md links to the roadmap — neither repeats a
+status, because the copies are what go stale.
 
-- `◀ next` — unstarted, and the thing to pick up next (only one at a time)
-- `◀ ready (branch …, pending merge)` — implemented but unmerged
-- `✓ shipped (PR #N, merged YYYY-MM-DD)` — merged
+**Status is a GFM checkbox and nothing else**, matching the minixrs repo's
+`docs/conventions/git-and-prs.md`:
 
-This repo runs a PR workflow as of PR #1, so its own entries use
-`✓ shipped (PR #N, merged YYYY-MM-DD)`. Entries predating it keep the
-`✓ shipped (commit <sha>, YYYY-MM-DD)` form they landed with. Items owned by
-another repo keep that repo's form (M1 shipped as minixrs PR #44).
-
-Flip the previous item forward and slide `◀ next` ahead as part of each
-change, in **both** the roadmap phase graph and the matching `docs/plans/`
-file. Reconcile stale `◀ ready` markers against `git log` when opening new
-work — "pending merge" labels on already-merged work accumulate otherwise.
-
-A work PR marks its **own** item `◀ ready (branch …, pending merge)`, never
-`✓ shipped` — the PR number and merge date do not exist yet. Flipping to
-`✓ shipped (PR #N, merged …)` is a later commit's job. Plans routinely say
-"→ shipped" for the item in flight; that instruction belongs to the follow-up.
+- `- [ ]` unstarted, `- [x]` done. **The first unchecked box in roadmap order is
+  what to pick up next** — there is no `◀ next` pointer to slide.
+- A PR checks its **own** box, in the same PR as the work. Never a follow-up
+  commit, never a cleanup inherited by the next change.
+- No PR number, no merge date, no "pending merge" state. `git log` and the PR
+  list answer those better than a hand-maintained line does.
+- Lines in the older form — `✓ shipped (PR #N, merged YYYY-MM-DD)`, or
+  `✓ shipped (commit <sha>, …)` from before the PR workflow — are retired-form
+  history in the roadmap's phase sections. Leave them; never write a new one.
 
 **Markers describe intent; scripts describe reality.** Prefer running the
 gate over trusting a marker:

@@ -31,7 +31,7 @@ status, because the copies are what go stale.
 gate over trusting a marker:
 
 ```sh
-verify/selftest.sh          # brand + image fixtures, needs no SDK — 11 fixtures
+verify/selftest.sh          # brand + image fixtures, needs no SDK — 14 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello

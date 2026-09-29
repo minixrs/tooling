@@ -145,6 +145,9 @@ are the failure mode here: the scripts are mostly preconditions.
   re-run `scripts/export-patches.sh <fork>` after every rebase.
 - **Dropping a patch is a fork operation.** `patches/` is `export-patches.sh` output, so deleting a
   `.patch` file only lasts until the next export — the commit must leave the fork branch (a force-push).
+  A hand deletion also leaves the survivors numbered `[PATCH n/<old count>]`; the real export fixes
+  that. Dropping the *tip* commit is a `git reset --hard HEAD~1`, not a rebase, so no SHA or
+  signature below it changes. Re-exports also churn the `-- \n<git version>` trailer; that is noise.
 - **Seed fork clones from an existing checkout.** `git clone --reference <checkout>
   --dissociate --branch <tag> --single-branch` cut llvm-project to ~90 s. A GitHub org
   fork shares object storage with upstream, so `gh repo fork` costs no upload and the

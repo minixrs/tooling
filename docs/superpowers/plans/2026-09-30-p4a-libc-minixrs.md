@@ -1068,12 +1068,13 @@ The second and third rows matter most. In the second, size and alignment are unc
 - [ ] **Step 6: Prove coverage is enforced (Review Focus 1)**
 
 ```bash
+cp src/unix/minixrs/mod.rs /tmp/minixrs-mod.rs.keep
 printf 'pub type sneaky_t = u8;\n' >> src/unix/minixrs/mod.rs
 ~/src/tooling/verify/check-libc-abi.sh; echo "exit=$?"
-git checkout src/unix/minixrs/mod.rs 2>/dev/null || git restore src/unix/minixrs/mod.rs
+cp /tmp/minixrs-mod.rs.keep src/unix/minixrs/mod.rs && rm /tmp/minixrs-mod.rs.keep
 ```
 
-Expected: `defined in … but in neither items.list nor allow.list:` followed by `  sneaky_t`, and `exit=1`. (The file is uncommitted at this point, so restore it from your Step 2 content if `git restore` has nothing to restore to.)
+Expected: `defined in … but in neither items.list nor allow.list:` followed by `  sneaky_t`, and `exit=1`. The copy-aside is deliberate: the file is not committed yet, so `git restore` would discard Step 2.
 
 - [ ] **Step 7: Prove a `#[cfg]` is refused (Review Focus 2)**
 

@@ -79,8 +79,9 @@ Review habits that carry over, each of which caught real defects in minixrs:
 ## Cross-repo rule
 
 minixrs and fork changes are **planned here, implemented in sessions inside
-those repos**. Never edit LLVM/musl/rust source from this repo. `docs/plans/`
-is how work crosses the boundary.
+those repos**. Never edit LLVM/musl/rust/libc source from this repo. A plan —
+`docs/superpowers/plans/` from P4 on, `docs/plans/` before it — is how work
+crosses the boundary.
 
 Statuses for work owned elsewhere (e.g. M1) are convenience mirrors —
 `~/src/minixrs/docs/plan.md` is authoritative for minixrs.

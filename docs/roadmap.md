@@ -24,10 +24,10 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 - minixrs pins `nightly-2026-07-23` (rustc 1.99.0-nightly, commit `6f72b5dd5`,
   **LLVM 22.1.8**) with `rust-src` + `llvm-tools` — so the LLVM fork targets
   `release/22.x` and the same patch series later serves rustc.
-- minixrs phase 5 (musl + FS) is in progress at slice 5.7. Slice 5.6 shipped
-  2026-07-26 (minixrs PR #47), so **the ABI freeze is in effect**: `Message`
-  layout, call numbers, endpoints and errnos now change only via a deliberate
-  ABI-bump PR touching both repos. exec-from-FS is still slice 5.9.
+- minixrs phase 5 (musl + FS) is complete, exec-from-FS (slice 5.9) included.
+  Slice 5.6 shipped 2026-07-26 (minixrs PR #47), so **the ABI freeze is in
+  effect**: `Message` layout, call numbers, endpoints and errnos now change
+  only via a deliberate ABI-bump PR touching both repos.
 - Cross-repo rule: minixrs/fork changes are planned here but implemented in
   separate sessions inside those repos.
 

@@ -65,7 +65,7 @@ a session inside the owning repo (the cross-repo rule). Each has one roadmap che
 
 | Slice | Repo | Delivers | Gate |
 |---|---|---|---|
-| **P4a** | `libc-minixrs` + tooling | The fork and `verify/check-libc-abi.sh` | The parity check is green and its negative fixture is red |
+| **P4a** | `libc-minixrs` + tooling | The fork and `verify/check-libc-abi.sh` — plan: [`2026-09-30-p4a-libc-minixrs.md`](../plans/2026-09-30-p4a-libc-minixrs.md) | The parity check is green, and red when the module is broken |
 | **P4b** | `rust-minixrs` | Target spec, std port, libc pinned | `./x build --stage 1 library` succeeds for host and target |
 | **P4c** | tooling | `build-rust.sh`, `check-rust.sh`, patch exports, layout docs | M5 |
 
@@ -77,8 +77,10 @@ cannot finish until a libc-minixrs tag exists.
 - **Fork:** `minixrs/libc-minixrs`, from `rust-lang/libc` tag `0.2.185` — the version std pins in
   `library/Cargo.lock`. Branch `minixrs/0.2.185`, rebase-maintained, force-pushed; tags
   `minixrs-0.2.185-N` are never moved.
-- **Content:** one self-contained module, `src/unix/minixrs/`, plus the three registration points
-  the Hurd port touches: `build.rs`, `src/unix/mod.rs`, `src/new/mod.rs`.
+- **Content:** one self-contained module, `src/unix/minixrs/`, plus three registration points:
+  `build.rs`, `src/unix/mod.rs`, and `src/new/mod.rs` with a small `src/new/minixrs/`. The last
+  is not optional the way Hurd's is: the Unix family re-exports a `unistd` module that normally
+  arrives through a `target_env` arm, and this target's `env` is empty (R4).
 - **Source of the definitions:** musl-minixrs leaves musl's aarch64 type layouts and constants
   untouched (its delta is seven files, none under `arch/aarch64/bits/`), so the definitions are
   libc's existing Linux-musl-aarch64 ones, copied. They are not re-derived from headers by hand.
@@ -90,9 +92,10 @@ cannot finish until a libc-minixrs tag exists.
 1. A tooling-owned manifest, `verify/libc-abi/items.list`, names every struct (with its fields)
    and every constant in `src/unix/minixrs/`.
 2. From the manifest the script generates two emitters. The C one is compiled by the SDK clang
-   against the SDK sysroot; the Rust one against libc-minixrs. Each defines a single `.rodata`
-   symbol holding the same ordered table of `u64`s: `sizeof`, `alignof` and each field offset per
-   struct, and each constant's value.
+   against the SDK sysroot (with `_GNU_SOURCE`, the view of the headers the libc crate mirrors);
+   the Rust one against libc-minixrs. Each writes the same ordered table of `u64`s into a
+   `.minixrs_abi` section: `sizeof`, `alignof` and each field offset per struct; size, alignment
+   and signedness per integer type; and each constant's value.
 3. Both objects are reduced to the raw bytes of that symbol with `llvm-objcopy` and compared. A
    mismatch reports the manifest line it corresponds to.
 4. **Coverage is enforced.** Every `pub struct` and `pub const` in the module must appear in the
@@ -103,8 +106,14 @@ The Rust side builds with the pinned nightly, `-Zbuild-std=core`, and a test-onl
 under `verify/testdata/` (`os: minixrs`, `families: ["unix"]`), so the gate does not depend on
 rust-minixrs existing.
 
-`verify/selftest.sh` gains a negative fixture: a manifest line with a deliberately wrong offset
-must make the comparer fail, and fail naming that line.
+The comparison itself is a separate script, `verify/libc-abi/compare.sh`, so `verify/selftest.sh`
+can exercise it with fabricated tables and no SDK: identical tables pass, one differing entry
+fails naming that entry's manifest line, and a short or empty table is malformed rather than a
+pass. The manifest carries no offsets to get wrong — the compilers compute them — so the
+end-to-end negative proof is done by breaking the module, in the P4a plan.
+
+The module may carry no `#[cfg]`: coverage is by name, and a `cfg`-gated second definition would
+hide behind a checked one.
 
 ## P4b — rust-minixrs
 

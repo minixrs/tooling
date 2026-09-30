@@ -10,9 +10,11 @@ compiler or OS source.
 
 ## Planning docs and status markers
 
-Status lives in `docs/roadmap.md` and nowhere else. `docs/plans/*.md` carry
-per-milestone *detail*, and README.md links to the roadmap — neither repeats a
-status, because the copies are what go stale.
+Status lives in `docs/roadmap.md` and nowhere else. `docs/plans/*.md` and
+`docs/superpowers/` carry *detail*, and README.md links to the roadmap — none
+of them repeats a status, because the copies are what go stale.
+`docs/archive/` holds work that is deliberately unscheduled (upstreaming); it
+carries no status at all.
 
 **Status is a GFM checkbox and nothing else**, matching the minixrs repo's
 `docs/conventions/git-and-prs.md`:
@@ -37,6 +39,42 @@ scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
 ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
 ```
+
+## Workflow: superpowers
+
+Work from P4 on is built with the superpowers skills, the same way the minixrs
+repo builds its slices (`~/src/minixrs/docs/conventions/docs-and-workflow.md`
+is the source of these rules; the mdBook, dprint and Hunk parts of it do not
+apply here):
+
+- **`brainstorming`** for the design, **`writing-plans`** for the task
+  breakdown, **`subagent-driven-development`** to execute — a fresh subagent per
+  task, a review after each, then a whole-branch review.
+- Designs land in **`docs/superpowers/specs/`**, plans in
+  **`docs/superpowers/plans/`**, named `YYYY-MM-DD-<topic>-{design,plan}.md`.
+  One design per roadmap phase; one plan per slice. `docs/plans/*.md` are the
+  pre-superpowers history for M1–M3 — leave them, write no new ones.
+- **The roadmap links to a spec by relative path and never restates it.** Two
+  copies drift, and the roadmap is the one people read.
+- **A plan for a fork or for minixrs is written here and executed in a session
+  inside that repo** (the cross-repo rule below). The plan is the hand-off.
+- **A plan is not authority.** Where a plan and its spec disagree, the spec
+  wins and the plan gets corrected.
+
+Review habits that carry over, each of which caught real defects in minixrs:
+
+- **Give a fresh reviewer the diff as a file** and ask it to verify the
+  arithmetic by hand, not to confirm that a check exists.
+- **The dominant defect in a subagent-driven branch is a comment, doc line or
+  assertion that was true when written and falsified by a later task in the
+  same branch.** Each task sees one file. As a whole-branch step, grep for
+  every "not yet", "until P<n>", "nothing reaches this" and count-style
+  tripwire the branch could have invalidated — in scripts, `docs/`, README.md
+  and this file.
+- **A rename, a moved path or a reworded claim owes a tree-wide grep** for the
+  old spelling before committing. A review-fix round owes it too.
+- **A subagent's report is a claim about its work, not evidence of it.** Verify
+  the artifact. Work dispatched in parallel needs a dedupe pass.
 
 ## Cross-repo rule
 

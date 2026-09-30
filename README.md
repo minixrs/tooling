@@ -14,7 +14,10 @@ is [docs/abi-note.md](docs/abi-note.md).
 ## Repo map
 
 ```
-docs/roadmap.md              phases P0–P5, milestone gates, risk register
+docs/roadmap.md              phases P0–P4, milestone gates, risk register
+docs/superpowers/specs/      per-phase designs (P4 onward)
+docs/superpowers/plans/      per-slice implementation plans (P4 onward)
+docs/archive/                work that is deliberately unscheduled (upstreaming)
 docs/abi-note.md             normative PT_NOTE brand spec (byte-exact)
 docs/sysroot-layout.md       $MINIXRS_SDK layout contract
 docs/plans/minixrs-m1.md     M1 implementation plan — execute in ~/src/minixrs
@@ -113,13 +116,10 @@ See [docs/roadmap.md](docs/roadmap.md). Status there is a GFM checkbox and
 nothing else — the first unchecked box under **Open work** is what to pick up
 next. This file deliberately keeps no copy of it.
 
-Where the phases stand in outline: P0–P2b and M3a are done (the SDK builds a
-branded `hello` from one `clang --target=aarch64-unknown-minixrs` call);
-**P3d**, dropping LLVM patch 0006's image-base pin for minixrs's new user VA
-map, is partly done and holds the next few boxes; **P4/M4–M5** (Rust `std` via
-libc-minixrs and rust-minixrs) is the milestone after it. Per-milestone detail:
-[minixrs-m1.md](docs/plans/minixrs-m1.md), [llvm-m2.md](docs/plans/llvm-m2.md),
-[musl-m3.md](docs/plans/musl-m3.md).
+Per-milestone detail: [minixrs-m1.md](docs/plans/minixrs-m1.md),
+[llvm-m2.md](docs/plans/llvm-m2.md), [musl-m3.md](docs/plans/musl-m3.md), and
+from P4 on the designs under [docs/superpowers/specs/](docs/superpowers/specs/)
+— P4 is [Rust `std`, build and link](docs/superpowers/specs/2026-09-30-p4-rust-std-design.md).
 
 `patches/*/` is `git format-patch` output, re-exported by
 `scripts/export-patches.sh` after every fork rebase. `llvm/` holds 5 patches

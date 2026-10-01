@@ -1,0 +1,652 @@
+diff --git a/library/panic_unwind/src/lib.rs b/library/panic_unwind/src/lib.rs
+index 9d204a15..c86d3f16 100644
+--- a/library/panic_unwind/src/lib.rs
++++ b/library/panic_unwind/src/lib.rs
+@@ -46,7 +46,7 @@
+         target_os = "psp",
+         target_os = "xous",
+         target_os = "solid_asp3",
+-        all(target_family = "unix", not(any(target_os = "espidf", target_os = "nuttx"))),
++        all(target_family = "unix", not(any(target_os = "espidf", target_os = "nuttx", target_os = "minixrs"))),
+         all(target_vendor = "fortanix", target_env = "sgx"),
+         target_family = "wasm",
+     ) => {
+diff --git a/library/std/build.rs b/library/std/build.rs
+index 98856b58..0b955b70 100644
+--- a/library/std/build.rs
++++ b/library/std/build.rs
+@@ -51,6 +51,7 @@ fn main() {
+         || target_os == "qnx"
+         || target_os == "xous"
+         || target_os == "hurd"
++        || target_os == "minixrs"
+         || target_os == "uefi"
+         || target_os == "teeos"
+         || target_os == "zkvm"
+diff --git a/library/std/src/env.rs b/library/std/src/env.rs
+index f5c60f75..bdf9af2c 100644
+--- a/library/std/src/env.rs
++++ b/library/std/src/env.rs
+@@ -1093,6 +1093,7 @@ pub mod consts {
+     /// * `"l4re"`
+     /// * `"linux"`
+     /// * `"macos"`
++    /// * `"minixrs"`
+     /// * `"netbsd"`
+     /// * `"nto"`
+     /// * `"openbsd"`
+diff --git a/library/std/src/fs/tests.rs b/library/std/src/fs/tests.rs
+index 4f2fa7fb..214c851e 100644
+--- a/library/std/src/fs/tests.rs
++++ b/library/std/src/fs/tests.rs
+@@ -182,6 +182,7 @@ fn file_test_io_seek_and_write() {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -216,6 +217,7 @@ fn file_lock_multiple_shared() {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -251,6 +253,7 @@ fn file_lock_blocking() {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -283,6 +286,7 @@ fn file_lock_drop() {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -317,6 +321,7 @@ fn file_lock_dup() {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+diff --git a/library/std/src/os/minixrs/mod.rs b/library/std/src/os/minixrs/mod.rs
+new file mode 100644
+index 00000000..ee7b3d51
+--- /dev/null
++++ b/library/std/src/os/minixrs/mod.rs
+@@ -0,0 +1,7 @@
++//! minixrs-specific definitions
++
++#![stable(feature = "raw_ext", since = "1.1.0")]
++#![forbid(unsafe_op_in_unsafe_fn)]
++
++pub mod fs;
++pub mod raw;
+diff --git a/library/std/src/os/minixrs/raw.rs b/library/std/src/os/minixrs/raw.rs
+new file mode 100644
+index 00000000..1679bf07
+--- /dev/null
++++ b/library/std/src/os/minixrs/raw.rs
+@@ -0,0 +1,33 @@
++//! minixrs-specific raw type definitions
++
++#![stable(feature = "raw_ext", since = "1.1.0")]
++#![deprecated(
++    since = "1.8.0",
++    note = "these type aliases are no longer supported by \
++              the standard library, the `libc` crate on \
++              crates.io should be used instead for the correct \
++              definitions"
++)]
++#![allow(deprecated)]
++
++use crate::os::raw::{c_long, c_ulong};
++
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type blkcnt_t = i64;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type blksize_t = i32;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type dev_t = u64;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type ino_t = u64;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type mode_t = u32;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type nlink_t = u32;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type off_t = i64;
++#[stable(feature = "raw_ext", since = "1.1.0")]
++pub type time_t = c_long;
++
++#[stable(feature = "pthread_t", since = "1.8.0")]
++pub type pthread_t = c_ulong;
+diff --git a/library/std/src/os/mod.rs b/library/std/src/os/mod.rs
+index a7ffd87d..2a152eca 100644
+--- a/library/std/src/os/mod.rs
++++ b/library/std/src/os/mod.rs
+@@ -117,6 +117,8 @@ pub mod windows {}
+ pub mod l4re;
+ #[cfg(target_os = "macos")]
+ pub mod macos;
++#[cfg(target_os = "minixrs")]
++pub mod minixrs;
+ #[cfg(target_os = "motor")]
+ pub mod motor;
+ #[cfg(target_os = "netbsd")]
+diff --git a/library/std/src/os/unix/mod.rs b/library/std/src/os/unix/mod.rs
+index 25aa3bf7..aa632ef9 100644
+--- a/library/std/src/os/unix/mod.rs
++++ b/library/std/src/os/unix/mod.rs
+@@ -67,6 +67,8 @@ mod platform {
+     pub use crate::os::l4re::*;
+     #[cfg(target_os = "linux")]
+     pub use crate::os::linux::*;
++    #[cfg(target_os = "minixrs")]
++    pub use crate::os::minixrs::*;
+     #[cfg(target_os = "netbsd")]
+     pub use crate::os::netbsd::*;
+     #[cfg(any(target_os = "nto", target_os = "qnx"))]
+diff --git a/library/std/src/os/unix/net/stream.rs b/library/std/src/os/unix/net/stream.rs
+index a50b1053..86f99b45 100644
+--- a/library/std/src/os/unix/net/stream.rs
++++ b/library/std/src/os/unix/net/stream.rs
+@@ -2,6 +2,7 @@
+     any(
+         target_os = "linux", target_os = "android",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "dragonfly", target_os = "freebsd",
+         target_os = "openbsd", target_os = "netbsd",
+         target_os = "solaris", target_os = "illumos",
+diff --git a/library/std/src/sys/args/unix.rs b/library/std/src/sys/args/unix.rs
+index 197931d8..6893b310 100644
+--- a/library/std/src/sys/args/unix.rs
++++ b/library/std/src/sys/args/unix.rs
+@@ -83,6 +83,7 @@ pub fn args() -> Args {
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "rtems",
+     target_os = "nuttx",
+ ))]
+diff --git a/library/std/src/sys/env_consts.rs b/library/std/src/sys/env_consts.rs
+index b14160cf..9d8e8b70 100644
+--- a/library/std/src/sys/env_consts.rs
++++ b/library/std/src/sys/env_consts.rs
+@@ -202,6 +202,17 @@ pub mod os {
+     pub const EXE_EXTENSION: &str = "";
+ }
+ 
++#[cfg(target_os = "minixrs")]
++pub mod os {
++    pub const FAMILY: &str = "unix";
++    pub const OS: &str = "minixrs";
++    pub const DLL_PREFIX: &str = "lib";
++    pub const DLL_SUFFIX: &str = ".so";
++    pub const DLL_EXTENSION: &str = "so";
++    pub const EXE_SUFFIX: &str = "";
++    pub const EXE_EXTENSION: &str = "";
++}
++
+ #[cfg(target_os = "netbsd")]
+ pub mod os {
+     pub const FAMILY: &str = "unix";
+diff --git a/library/std/src/sys/fd/unix.rs b/library/std/src/sys/fd/unix.rs
+index a96df397..dd88fd20 100644
+--- a/library/std/src/sys/fd/unix.rs
++++ b/library/std/src/sys/fd/unix.rs
+@@ -220,6 +220,7 @@ pub fn read_buf_at(&self, mut cursor: BorrowedCursor<'_, u8>, offset: u64) -> io
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -246,6 +247,7 @@ pub fn read_vectored_at(&self, bufs: &mut [IoSliceMut<'_>], offset: u64) -> io::
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -429,6 +431,7 @@ pub fn write_at(&self, buf: &[u8], offset: u64) -> io::Result<usize> {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+@@ -455,6 +458,7 @@ pub fn write_vectored_at(&self, bufs: &[IoSlice<'_>], offset: u64) -> io::Result
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "netbsd",
+diff --git a/library/std/src/sys/fs/unix.rs b/library/std/src/sys/fs/unix.rs
+index d39dd4c0..cc7c00ec 100644
+--- a/library/std/src/sys/fs/unix.rs
++++ b/library/std/src/sys/fs/unix.rs
+@@ -27,6 +27,7 @@
+     target_os = "freebsd",
+     target_os = "fuchsia",
+     target_os = "illumos",
++    target_os = "minixrs",
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "redox",
+@@ -42,6 +43,7 @@
+     target_os = "freebsd",
+     target_os = "fuchsia",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "illumos",
+     target_os = "l4re",
+     target_os = "linux",
+@@ -432,6 +434,7 @@ fn get_path(_fd: c_int) -> Option<PathBuf> {
+     target_os = "freebsd",
+     target_os = "fuchsia",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "illumos",
+     target_os = "linux",
+     target_os = "nto",
+@@ -459,6 +462,7 @@ pub struct DirEntry {
+     target_os = "freebsd",
+     target_os = "fuchsia",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "illumos",
+     target_os = "linux",
+     target_os = "nto",
+@@ -487,6 +491,7 @@ struct dirent64_min {
+     target_os = "freebsd",
+     target_os = "fuchsia",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "illumos",
+     target_os = "linux",
+     target_os = "nto",
+@@ -886,6 +891,7 @@ impl Iterator for ReadDir {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "nto",
+@@ -986,6 +992,7 @@ fn next(&mut self) -> Option<io::Result<DirEntry>> {
+         target_os = "freebsd",
+         target_os = "fuchsia",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "illumos",
+         target_os = "linux",
+         target_os = "nto",
+@@ -1186,6 +1193,7 @@ pub fn file_type(&self) -> io::Result<FileType> {
+         target_os = "illumos",
+         target_os = "l4re",
+         target_os = "linux",
++        target_os = "minixrs",
+         target_os = "nto",
+         target_os = "qnx",
+         target_os = "redox",
+@@ -1250,6 +1258,7 @@ fn name_bytes(&self) -> &[u8] {
+         target_os = "qnx",
+         target_os = "vita",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "wasi",
+     )))]
+     fn name_cstr(&self) -> &CStr {
+@@ -1268,6 +1277,7 @@ fn name_cstr(&self) -> &CStr {
+         target_os = "qnx",
+         target_os = "vita",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "wasi",
+     ))]
+     fn name_cstr(&self) -> &CStr {
+@@ -1465,6 +1475,7 @@ unsafe fn os_datasync(fd: c_int) -> c_int {
+             target_os = "nto",
+             target_os = "qnx",
+             target_os = "hurd",
++            target_os = "minixrs",
+         ))]
+         unsafe fn os_datasync(fd: c_int) -> c_int {
+             libc::fdatasync(fd)
+@@ -1480,6 +1491,7 @@ unsafe fn os_datasync(fd: c_int) -> c_int {
+             target_os = "nto",
+             target_os = "qnx",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_vendor = "apple",
+         )))]
+         unsafe fn os_datasync(fd: c_int) -> c_int {
+@@ -1493,6 +1505,7 @@ pub fn lock(&self) -> io::Result<()> {
+                 target_os = "freebsd",
+                 target_os = "fuchsia",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+@@ -1517,6 +1530,7 @@ pub fn lock_shared(&self) -> io::Result<()> {
+                 target_os = "freebsd",
+                 target_os = "fuchsia",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+@@ -1541,6 +1555,7 @@ pub fn try_lock(&self) -> Result<(), TryLockError> {
+                 target_os = "freebsd",
+                 target_os = "fuchsia",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+@@ -1576,6 +1591,7 @@ pub fn try_lock_shared(&self) -> Result<(), TryLockError> {
+                 target_os = "freebsd",
+                 target_os = "fuchsia",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+@@ -1611,6 +1627,7 @@ pub fn unlock(&self) -> io::Result<()> {
+                 target_os = "freebsd",
+                 target_os = "fuchsia",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+diff --git a/library/std/src/sys/io/error/unix.rs b/library/std/src/sys/io/error/unix.rs
+index c545558c..ec44ea6d 100644
+--- a/library/std/src/sys/io/error/unix.rs
++++ b/library/std/src/sys/io/error/unix.rs
+@@ -17,6 +17,7 @@
+             target_os = "fuchsia",
+             target_os = "l4re",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "teeos",
+         ),
+         link_name = "__errno_location"
+diff --git a/library/std/src/sys/net/connection/socket/mod.rs b/library/std/src/sys/net/connection/socket/mod.rs
+index 66aa2a80..c87d81b0 100644
+--- a/library/std/src/sys/net/connection/socket/mod.rs
++++ b/library/std/src/sys/net/connection/socket/mod.rs
+@@ -63,6 +63,7 @@
+     any(
+         target_os = "linux", target_os = "android",
+         target_os = "hurd",
++        target_os = "minixrs",
+         target_os = "dragonfly", target_os = "freebsd",
+         target_os = "openbsd", target_os = "netbsd",
+         target_os = "solaris", target_os = "illumos",
+diff --git a/library/std/src/sys/net/connection/socket/unix.rs b/library/std/src/sys/net/connection/socket/unix.rs
+index 41850574..c0df9366 100644
+--- a/library/std/src/sys/net/connection/socket/unix.rs
++++ b/library/std/src/sys/net/connection/socket/unix.rs
+@@ -71,6 +71,7 @@ pub fn new(family: c_int, ty: c_int) -> io::Result<Socket> {
+                 target_os = "freebsd",
+                 target_os = "illumos",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "linux",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+@@ -121,6 +122,7 @@ pub fn new_pair(fam: c_int, ty: c_int) -> io::Result<(Socket, Socket)> {
+                     target_os = "illumos",
+                     target_os = "linux",
+                     target_os = "hurd",
++                    target_os = "minixrs",
+                     target_os = "netbsd",
+                     target_os = "openbsd",
+                     target_os = "cygwin",
+@@ -253,6 +255,7 @@ pub fn accept(&self, storage: *mut sockaddr, len: *mut socklen_t) -> io::Result<
+                 target_os = "illumos",
+                 target_os = "linux",
+                 target_os = "hurd",
++                target_os = "minixrs",
+                 target_os = "netbsd",
+                 target_os = "openbsd",
+                 target_os = "cygwin",
+diff --git a/library/std/src/sys/pal/unix/mod.rs b/library/std/src/sys/pal/unix/mod.rs
+index 75a75ab6..f17826b5 100644
+--- a/library/std/src/sys/pal/unix/mod.rs
++++ b/library/std/src/sys/pal/unix/mod.rs
+@@ -99,9 +99,10 @@ unsafe fn sanitize_standard_fds() {
+             while libc::poll(pfds.as_mut_ptr(), 3, 0) == -1 {
+                 match errno() {
+                     libc::EINTR => continue,
+-                    #[cfg(target_vendor = "unikraft")]
++                    #[cfg(any(target_vendor = "unikraft", target_os = "minixrs"))]
+                     libc::ENOSYS => {
+-                        // Not all configurations of Unikraft enable `LIBPOSIX_EVENT`.
++                        // Not all configurations of Unikraft enable `LIBPOSIX_EVENT`,
++                        // and the minixrs kernel has no `poll` yet.
+                         break 'poll;
+                     }
+                     libc::EINVAL | libc::EAGAIN | libc::ENOMEM => {
+@@ -176,6 +177,14 @@ mod sigpipe {
+                 ON_BROKEN_PIPE_USED.store(true, crate::sync::atomic::Ordering::Relaxed);
+             }
+             if let Some(handler) = handler {
++                // The minixrs kernel has no signals yet: musl answers ENOSYS, and a
++                // process that cannot be sent SIGPIPE needs no disposition for it.
++                #[cfg(target_os = "minixrs")]
++                rtassert!(
++                    signal(libc::SIGPIPE, handler) != libc::SIG_ERR
++                        || crate::sys::io::errno() == libc::ENOSYS
++                );
++                #[cfg(not(target_os = "minixrs"))]
+                 rtassert!(signal(libc::SIGPIPE, handler) != libc::SIG_ERR);
+                 #[cfg(target_os = "hurd")]
+                 {
+diff --git a/library/std/src/sys/paths/unix.rs b/library/std/src/sys/paths/unix.rs
+index 7d916b84..b4eceb5e 100644
+--- a/library/std/src/sys/paths/unix.rs
++++ b/library/std/src/sys/paths/unix.rs
+@@ -268,6 +268,7 @@ pub fn current_exe() -> io::Result<PathBuf> {
+     target_os = "linux",
+     target_os = "cygwin",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "android",
+     target_os = "nuttx",
+     target_os = "emscripten"
+diff --git a/library/std/src/sys/personality/mod.rs b/library/std/src/sys/personality/mod.rs
+index eabef922..e88ef5e3 100644
+--- a/library/std/src/sys/personality/mod.rs
++++ b/library/std/src/sys/personality/mod.rs
+@@ -33,7 +33,7 @@ fn rust_eh_personality() {
+         target_os = "psp",
+         target_os = "xous",
+         target_os = "solid_asp3",
+-        all(target_family = "unix", not(target_os = "espidf"), not(target_os = "l4re"), not(target_os = "nuttx")),
++        all(target_family = "unix", not(target_os = "espidf"), not(target_os = "l4re"), not(target_os = "nuttx"), not(target_os = "minixrs")),
+         all(target_vendor = "fortanix", target_env = "sgx"),
+     ) => {
+         mod gcc;
+diff --git a/library/std/src/sys/pipe/unix.rs b/library/std/src/sys/pipe/unix.rs
+index bb97e806..8be7e885 100644
+--- a/library/std/src/sys/pipe/unix.rs
++++ b/library/std/src/sys/pipe/unix.rs
+@@ -17,6 +17,7 @@ pub fn pipe() -> io::Result<(Pipe, Pipe)> {
+             target_os = "dragonfly",
+             target_os = "freebsd",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "illumos",
+             target_os = "linux",
+             target_os = "netbsd",
+diff --git a/library/std/src/sys/random/mod.rs b/library/std/src/sys/random/mod.rs
+index e5a66dc4..b096b1bc 100644
+--- a/library/std/src/sys/random/mod.rs
++++ b/library/std/src/sys/random/mod.rs
+@@ -53,6 +53,7 @@
+         target_os = "aix",
+         target_os = "hurd",
+         target_os = "l4re",
++        target_os = "minixrs",
+         target_os = "nto",
+         target_os = "qnx",
+     ) => {
+diff --git a/library/std/src/sys/thread/mod.rs b/library/std/src/sys/thread/mod.rs
+index 9816981c..98b68c2f 100644
+--- a/library/std/src/sys/thread/mod.rs
++++ b/library/std/src/sys/thread/mod.rs
+@@ -57,6 +57,7 @@
+             target_os = "emscripten",
+             target_os = "redox",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "aix",
+             target_os = "wasi",
+         )))]
+@@ -70,6 +71,7 @@
+             target_os = "illumos",
+             target_os = "dragonfly",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "vxworks",
+             target_os = "wasi",
+             target_vendor = "apple",
+@@ -83,6 +85,7 @@
+             target_os = "emscripten",
+             target_os = "redox",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "aix",
+             target_os = "wasi",
+         ))]
+@@ -130,6 +133,7 @@
+     target_os = "illumos",
+     target_os = "dragonfly",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "vxworks",
+     target_os = "wasi",
+     target_vendor = "apple",
+diff --git a/library/std/src/sys/thread/unix.rs b/library/std/src/sys/thread/unix.rs
+index 2dbb0314..5d8a6b2c 100644
+--- a/library/std/src/sys/thread/unix.rs
++++ b/library/std/src/sys/thread/unix.rs
+@@ -4,6 +4,7 @@
+     target_os = "emscripten",
+     target_os = "redox",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "aix",
+     target_os = "wasi",
+ )))]
+@@ -156,6 +157,7 @@ pub fn available_parallelism() -> io::Result<NonZero<usize>> {
+             target_os = "emscripten",
+             target_os = "fuchsia",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "linux",
+             target_os = "aix",
+             target_vendor = "apple",
+@@ -547,6 +549,7 @@ pub fn sleep(dur: Duration) {
+             target_os = "illumos",
+             target_os = "dragonfly",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "vxworks",
+             target_os = "wasi",
+         ) => {
+@@ -644,6 +647,7 @@ pub fn sleep(dur: Duration) {
+     target_os = "illumos",
+     target_os = "dragonfly",
+     target_os = "hurd",
++    target_os = "minixrs",
+     target_os = "vxworks",
+     target_os = "wasi",
+ ))]
+diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/thread_local/mod.rs
+index d48bb1c8..42dadf06 100644
+--- a/library/std/src/sys/thread_local/mod.rs
++++ b/library/std/src/sys/thread_local/mod.rs
+@@ -63,6 +63,7 @@ pub(crate) mod destructors {
+             target_os = "fuchsia",
+             target_os = "redox",
+             target_os = "hurd",
++            target_os = "minixrs",
+             target_os = "netbsd",
+             target_os = "dragonfly"
+         ) => {
+diff --git a/library/unwind/src/lib.rs b/library/unwind/src/lib.rs
+index dce3ea8c..71c588a1 100644
+--- a/library/unwind/src/lib.rs
++++ b/library/unwind/src/lib.rs
+@@ -26,6 +26,11 @@
+     ) => {
+         // These "unix" family members do not have unwinder.
+     }
++    target_os = "minixrs" => {
++        // No unwinder yet: panic = "abort" only. backtrace-rs still links the
++        // walker entry points, so this answers them with an empty stack.
++        mod minixrs;
++    }
+     any(
+         unix,
+         windows,
+diff --git a/library/unwind/src/minixrs.rs b/library/unwind/src/minixrs.rs
+new file mode 100644
+index 00000000..88153126
+--- /dev/null
++++ b/library/unwind/src/minixrs.rs
+@@ -0,0 +1,32 @@
++//! A null unwinder for minixrs, which links no unwinder yet (`panic = "abort"`).
++//!
++//! backtrace-rs, which std compiles in for every Unix target, calls
++//! `_Unwind_Backtrace` to walk the stack. Answering `_URC_END_OF_STACK` before
++//! the first frame leaves every trace empty, which std reports as
++//! `BacktraceStatus::Unsupported`. No context is ever handed out, so the
++//! accessors below are never reached; they exist only so that the link
++//! resolves. Delete this module when LLVM libunwind is linked for minixrs.
++
++use core::ffi::c_void;
++
++const URC_END_OF_STACK: i32 = 5;
++
++#[unsafe(no_mangle)]
++pub extern "C" fn _Unwind_Backtrace(_trace: *mut c_void, _arg: *mut c_void) -> i32 {
++    URC_END_OF_STACK
++}
++
++#[unsafe(no_mangle)]
++pub extern "C" fn _Unwind_GetIP(_ctx: *mut c_void) -> usize {
++    0
++}
++
++#[unsafe(no_mangle)]
++pub extern "C" fn _Unwind_GetCFA(_ctx: *mut c_void) -> usize {
++    0
++}
++
++#[unsafe(no_mangle)]
++pub extern "C" fn _Unwind_FindEnclosingFunction(_pc: *mut c_void) -> *mut c_void {
++    core::ptr::null_mut()
++}

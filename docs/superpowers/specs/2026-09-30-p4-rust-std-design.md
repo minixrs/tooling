@@ -46,7 +46,7 @@ verified on the host.
 | # | Decision | Rejected alternative, and why |
 |---|---|---|
 | **R1** | P4 ends at M5 (build + link + host checks). M4 (boot) opens the next phase. | P4 includes the boot — blocks on minixrs chunk 5. |
-| **R2** | The patched **clang is the linker driver** for Rust binaries: `linker-flavor: gnu-cc`, `linker: clang`, pre-link arg `--target=aarch64-unknown-minixrs`. | `rust-lld` with self-contained crt objects — restates the driver's crt order and `-z` flags in the target spec, and the two copies drift. The brand only reaches a binary through musl-minixrs's `crt1.o`, which the driver already selects. |
+| **R2** | The patched **clang is the linker driver** for Rust binaries: `linker-flavor: gnu-cc`, `linker: aarch64-unknown-minixrs-clang` — the SDK's clang under its triple-prefixed name (a symlink in `$MINIXRS_SDK/bin`), from which clang infers `--target`. A bare `clang` would resolve through `PATH` to Apple's, which does not know the triple. | `rust-lld` with self-contained crt objects — restates the driver's crt order and `-z` flags in the target spec, and the two copies drift. The brand only reaches a binary through musl-minixrs's `crt1.o`, which the driver already selects. |
 | **R3** | **`panic = "abort"` only.** No unwinder is built or linked. | Shipping LLVM libunwind — the largest item in the phase, and untestable because nothing boots. Owed later; see the [ledger](#owed-later). |
 | **R4** | std reuses `sys/pal/unix` with `target_os = "minixrs"` branches; `families: ["unix"]`, `env: ""`. | A dedicated IPC-speaking PAL — thousands of lines duplicating musl-minixrs, and contrary to roadmap locked decision 1. `env: "musl"` — drags in Linux-musl `cfg` paths across crates.io. |
 | **R5** | **No fake success in std.** Where the kernel lacks a call, std calls musl, musl answers `-ENOSYS`, and std returns `Err` or tolerates the errno. When the kernel grows the call, the feature turns on with no std change. | Stubbing calls to succeed — hides kernel gaps and needs a second std change later. |
@@ -131,9 +131,10 @@ hide behind a checked one.
 | `llvm-target` | `aarch64-unknown-minixrs` | The real triple; rustc now links an LLVM that knows it |
 | `os` / `env` / `vendor` | `minixrs` / `""` / `unknown` | R4 |
 | `families` | `["unix"]` | R4 |
-| linker | `gnu-cc`, `clang`, pre-link `--target=aarch64-unknown-minixrs` | R2 |
+| linker | `gnu-cc`, `aarch64-unknown-minixrs-clang` | R2 |
 | `features` | `+v8a,+fp-armv8,+neon` | Exactly what `clang --target=aarch64-unknown-minixrs -###` reports, so C and Rust objects agree |
-| relocation | `static`; no PIE; `crt-static` default on and not switchable; no dynamic linking | The SDK's C hello is `ET_EXEC`; minixrs has no dynamic loader |
+| relocation | `static`; no PIE; `crt-static` default on and respected; no dynamic linking | The SDK's C hello is `ET_EXEC`; minixrs has no dynamic loader. rustc refuses a target whose static CRT is not `crt_static_respected`; `-C target-feature=-crt-static` simply fails to link, there being no shared libc |
+| frame pointer, stack probes | non-leaf; inline | What clang uses for the triple (`-mframe-pointer=non-leaf…`), as aarch64-linux does |
 | `panic-strategy` | `abort` | R3 |
 | `has-thread-local` | `true` | ELF TLS, as clang emits for C |
 | metadata | tier 3, `std: true`, `host_tools: false` | |
@@ -152,18 +153,24 @@ an explicit OS list; minixrs is not on it and gets the no-op. The edits:
 |---|---|---|
 | `sys/pal/unix/mod.rs`, `sanitize_standard_fds` | `ENOSYS` from `poll` breaks to the `fcntl` fallback, as the existing Unikraft arm does | R6, startup abort |
 | `sys/pal/unix/mod.rs`, `reset_sigpipe` | The `rtassert!` on `signal()` tolerates `ENOSYS` on minixrs | R6, startup abort |
-| `unwind/src/lib.rs` | minixrs joins the group that links no unwinder library | R3 |
+| `unwind/src/lib.rs`, new `unwind/src/minixrs.rs` | A **null unwinder**: the four entry points backtrace-rs links on every Unix target (`_Unwind_Backtrace`, answering end-of-stack before the first frame, and three accessors it never reaches). Every captured backtrace is empty, which std already reports as `Unsupported` | R3, link. backtrace-rs is a submodule, so gating it means a third fork; gating std's two callers leaves dead variables `-D warnings` rejects |
+| `panic_unwind/src/lib.rs`, `sys/personality/mod.rs` | The `dummy` panic runtime and no gcc personality, as for espidf and nuttx | R3, compile — bootstrap builds the `panic-unwind` feature for every target |
+| `sys/io/error/unix.rs` | `errno_location` links as `__errno_location`, musl's name | R6, link |
 | `sys/random/mod.rs` | Selects `unix_legacy` (`/dev/urandom`) | R6, the default arm selects nothing and does not compile |
 | `sys/thread_local/mod.rs` | Joins Hurd's `linux_like` destructor arm | R6, compile |
 | `std/build.rs` | Added to the "no special requirements" list | std refuses to build otherwise |
 | `os/mod.rs`, new `os/minixrs/{mod,fs,raw}.rs` | `std::os::minixrs`, mirroring `os/hurd` | R6, compile |
-| `sys/{args,env_consts,fd,fs,paths,pipe,process,thread,time,net}` | One `target_os` entry wherever Hurd has one | R6, compile |
+| `sys/{args,env_consts,fd,fs,paths,pipe,thread,net}`, `os/unix` | minixrs takes the arm linux-musl takes where Hurd's arm is a POSIX or musl path; not glibc's `*64` aliases or Hurd-only items. The P4b plan decides every site | R6, compile; R4 |
 | `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.185-N" }`; `Cargo.lock` regenerated | R12 |
 
-The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (30 files, 95 hits at the
-pin) and decides each one; "Hurd has a line here" is a prompt to look, not a rule to copy. The
-compiler side also needs the target registered with bootstrap's sanity check, since the stage-0
-compiler does not know the triple.
+The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (26 files, 83 hits at the
+pin) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
+prompt to look, not a rule to copy. The compiler side also needs the target registered with
+bootstrap's sanity check, since the stage-0 compiler does not know the triple, and a display name
+in rustdoc's exhaustive match on `Os`.
+
+std also needs more of libc-minixrs than P4a seeded: about 180 constants, functions and socket
+structs, which P4b adds under the same parity gate and releases as `minixrs-0.2.185-2`.
 
 ## P4c — tooling
 
@@ -193,7 +200,9 @@ In order; any failure stops the script and nothing is installed:
 3. A fresh `cargo new` hello builds with a bare
    `cargo +minixrs build --target aarch64-unknown-minixrs`, run with `RUSTFLAGS` and
    `CARGO_ENCODED_RUSTFLAGS` unset and no `.cargo/config.toml` in scope.
-4. The output is `ET_EXEC`, has no undefined symbols, and contains no `_Unwind_*` symbol.
+4. The output is `ET_EXEC`, has no undefined global symbols, and defines no `_Unwind_*` symbol
+   but the null unwinder's four. (musl leaves `_DYNAMIC` a local hidden undefined, as in the C
+   hello; std's `__cxa_thread_atexit_impl` is weak.)
 5. `verify/check-brand.sh` and `verify/check-image.sh` pass on it.
 6. It is installed at `$MINIXRS_SDK/share/minixrs/hello-rs`.
 
@@ -205,6 +214,9 @@ the source, per `CLAUDE.md`'s "a new test that passes on its first run has not b
 - `scripts/export-patches.sh` already has `rust` and `libc` arms. (The `libc` base default
   moved from `upstream/main` to `0.2.185` in P4a; the `rust` default is already the pin.)
 - `docs/sysroot-layout.md` gains `rust/` and `share/minixrs/hello-rs`.
+- The `bin/aarch64-unknown-minixrs-clang` symlink the target spec names (R2) is installed by
+  `scripts/build-llvm.sh` and checked by `verify/check-driver.sh`; P4b adds it, because the
+  target spec depends on it.
 - `README.md` and `CLAUDE.md` gain the new scripts and gates.
 
 ## Owed later
@@ -214,7 +226,7 @@ prerequisites, so none can be dropped silently.
 
 | Owed | Unblocked by | Until then |
 |---|---|---|
-| **libunwind and `panic = "unwind"`** — a `scripts/build-libunwind.sh` cross-building LLVM libunwind into the SDK (expect the four CMake traps `build-compiler-rt.sh` hit), the `unwind` crate arm switched to link it, the target default reconsidered | A later phase; also needs `AT_PHDR`/`dl_iterate_phdr` to work for the image in question (`check-image.sh --boot-module` drops the `AT_PHDR` rule because boot modules lack it) | `catch_unwind` does not catch; no backtraces; crates requiring unwinding do not work |
+| **libunwind and `panic = "unwind"`** — a `scripts/build-libunwind.sh` cross-building LLVM libunwind into the SDK (expect the four CMake traps `build-compiler-rt.sh` hit), the `unwind` crate arm switched to link it and the null unwinder (`unwind/src/minixrs.rs`) deleted, the target default reconsidered | A later phase; also needs `AT_PHDR`/`dl_iterate_phdr` to work for the image in question (`check-image.sh --boot-module` drops the `AT_PHDR` rule because boot modules lack it) | `catch_unwind` does not catch; no backtraces; crates requiring unwinding do not work |
 | **M4 — a std hello boots on minixrs** | minixrs chunk 5 (`brk`/`mmap`) | `malloc` returns `NULL`; `hello-rs` aborts if booted |
 | TLS larger than musl's builtin block (16 words) | The same `mmap` | `__init_tls` crashes if std's `PT_TLS` does not fit; measure `hello-rs`'s `PT_TLS` at M4 |
 | `HashMap`'s default hasher | `/dev/urandom` in minixrs | Panics on first use |

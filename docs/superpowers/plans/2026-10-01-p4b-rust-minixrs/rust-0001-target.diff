@@ -1,0 +1,256 @@
+diff --git a/compiler/rustc_target/src/spec/base/minixrs.rs b/compiler/rustc_target/src/spec/base/minixrs.rs
+new file mode 100644
+index 00000000..0fa58160
+--- /dev/null
++++ b/compiler/rustc_target/src/spec/base/minixrs.rs
+@@ -0,0 +1,20 @@
++use crate::spec::{Os, PanicStrategy, RelocModel, TargetOptions, cvs};
++
++pub(crate) fn opts() -> TargetOptions {
++    TargetOptions {
++        os: Os::Minixrs,
++        families: cvs!["unix"],
++        // minixrs has no dynamic loader: every program is a static `ET_EXEC`,
++        // as the SDK's C programs are.
++        dynamic_linking: false,
++        relocation_model: RelocModel::Static,
++        position_independent_executables: false,
++        crt_static_default: true,
++        crt_static_respected: true,
++        crt_static_allows_dylibs: false,
++        has_thread_local: true,
++        // No unwinder is linked yet.
++        panic_strategy: PanicStrategy::Abort,
++        ..Default::default()
++    }
++}
+diff --git a/compiler/rustc_target/src/spec/base/mod.rs b/compiler/rustc_target/src/spec/base/mod.rs
+index 13f364f3..4fbdddd0 100644
+--- a/compiler/rustc_target/src/spec/base/mod.rs
++++ b/compiler/rustc_target/src/spec/base/mod.rs
+@@ -23,6 +23,7 @@
+ pub(crate) mod linux_wasm;
+ pub(crate) mod lynxos178;
+ pub(crate) mod managarm_mlibc;
++pub(crate) mod minixrs;
+ pub(crate) mod motor;
+ pub(crate) mod msvc;
+ pub(crate) mod netbsd;
+diff --git a/compiler/rustc_target/src/spec/mod.rs b/compiler/rustc_target/src/spec/mod.rs
+index a747b0ae..08bcdc8e 100644
+--- a/compiler/rustc_target/src/spec/mod.rs
++++ b/compiler/rustc_target/src/spec/mod.rs
+@@ -1557,6 +1557,8 @@ fn $module() {
+     ("i686-unknown-hurd-gnu", i686_unknown_hurd_gnu),
+     ("x86_64-unknown-hurd-gnu", x86_64_unknown_hurd_gnu),
+ 
++    ("aarch64-unknown-minixrs", aarch64_unknown_minixrs),
++
+     ("aarch64-apple-darwin", aarch64_apple_darwin),
+     ("arm64e-apple-darwin", arm64e_apple_darwin),
+     ("x86_64-apple-darwin", x86_64_apple_darwin),
+@@ -1995,6 +1997,7 @@ pub enum Os {
+         LynxOs178 = "lynxos178",
+         MacOs = "macos",
+         Managarm = "managarm",
++        Minixrs = "minixrs",
+         Motor = "motor",
+         NetBsd = "netbsd",
+         None = "none",
+diff --git a/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs b/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs
+new file mode 100644
+index 00000000..4027e428
+--- /dev/null
++++ b/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs
+@@ -0,0 +1,29 @@
++use crate::spec::{Arch, FramePointer, StackProbeType, Target, TargetMetadata, base};
++
++pub(crate) fn target() -> Target {
++    let mut base = base::minixrs::opts();
++    base.max_atomic_width = Some(128);
++    base.stack_probes = StackProbeType::Inline;
++    // What `clang --target=aarch64-unknown-minixrs` enables, so C and Rust
++    // objects in one image agree.
++    base.features = "+v8a,+fp-armv8,+neon".into();
++    base.frame_pointer = FramePointer::NonLeaf;
++    // The minixrs SDK's clang, by its triple-prefixed name: invoked so, it
++    // targets minixrs, selects musl-minixrs's crt objects (which carry the
++    // image brand) and passes the minixrs layout flags to lld.
++    base.linker = Some("aarch64-unknown-minixrs-clang".into());
++
++    Target {
++        llvm_target: "aarch64-unknown-minixrs".into(),
++        metadata: TargetMetadata {
++            description: Some("ARM64 minixrs".into()),
++            tier: Some(3),
++            host_tools: Some(false),
++            std: Some(true),
++        },
++        pointer_width: 64,
++        data_layout: "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32".into(),
++        arch: Arch::AArch64,
++        options: base,
++    }
++}
+diff --git a/src/bootstrap/src/core/sanity.rs b/src/bootstrap/src/core/sanity.rs
+index 92b1f35b..6689200a 100644
+--- a/src/bootstrap/src/core/sanity.rs
++++ b/src/bootstrap/src/core/sanity.rs
+@@ -34,6 +34,7 @@ pub struct Finder {
+ /// when the newly-bumped stage 0 compiler now knows about the formerly-missing targets.
+ const STAGE0_MISSING_TARGETS: &[&str] = &[
+     // just a dummy comment so the list doesn't get onelined
++    "aarch64-unknown-minixrs",
+ ];
+ 
+ /// Minimum version threshold for libstdc++ required when using prebuilt LLVM
+diff --git a/src/doc/rustc/src/SUMMARY.md b/src/doc/rustc/src/SUMMARY.md
+index 3abeea4e..7ab6b298 100644
+--- a/src/doc/rustc/src/SUMMARY.md
++++ b/src/doc/rustc/src/SUMMARY.md
+@@ -132,6 +132,7 @@
+     - [\*-unknown-hermit](platform-support/hermit.md)
+     - [\*-unknown-freebsd](platform-support/freebsd.md)
+     - [\*-unknown-managarm-mlibc](platform-support/managarm.md)
++    - [aarch64-unknown-minixrs](platform-support/minixrs.md)
+     - [\*-unknown-motor](platform-support/motor.md)
+     - [\*-unknown-netbsd\*](platform-support/netbsd.md)
+     - [\*-unknown-openbsd](platform-support/openbsd.md)
+diff --git a/src/doc/rustc/src/platform-support.md b/src/doc/rustc/src/platform-support.md
+index ce4d55c2..e01127eb 100644
+--- a/src/doc/rustc/src/platform-support.md
++++ b/src/doc/rustc/src/platform-support.md
+@@ -274,6 +274,7 @@ target | std | host | notes
+ `aarch64-unknown-linux-gnu_ilp32` | ✓ | ✓ | ARM64 Linux (ILP32 ABI)
+ [`aarch64-unknown-linux-pauthtest`](platform-support/aarch64-unknown-linux-pauthtest.md) | ✓ | ✓ | ARM64 PAC ELF ABI
+ [`aarch64-unknown-managarm-mlibc`](platform-support/managarm.md) | ? |  | ARM64 Managarm
++[`aarch64-unknown-minixrs`](platform-support/minixrs.md) | ✓ |  | ARM64 minixrs
+ [`aarch64-unknown-netbsd`](platform-support/netbsd.md) | ✓ | ✓ | ARM64 NetBSD
+ [`aarch64-unknown-nto-qnx700`](platform-support/nto-qnx.md) | ? |  | ARM64 QNX SDP 7.0 |
+ [`aarch64-unknown-nto-qnx710`](platform-support/nto-qnx.md) | ✓ |  | ARM64 QNX SDP 7.1 with default network stack (io-pkt) |
+diff --git a/src/doc/rustc/src/platform-support/minixrs.md b/src/doc/rustc/src/platform-support/minixrs.md
+new file mode 100644
+index 00000000..5fa6de0a
+--- /dev/null
++++ b/src/doc/rustc/src/platform-support/minixrs.md
+@@ -0,0 +1,59 @@
++# `aarch64-unknown-minixrs`
++
++**Tier: 3**
++
++[minixrs](https://github.com/minixrs) is a microkernel operating system written
++in Rust, with a POSIX userland provided by a fork of musl.
++
++## Target maintainers
++
++[@KevinBarnard](https://github.com/KevinBarnard)
++
++## Requirements
++
++This target is cross-compiled. It needs the minixrs SDK: an LLVM that knows the
++`aarch64-unknown-minixrs` triple, and a musl sysroot for it.
++
++Programs are statically linked `ET_EXEC` images; minixrs has no dynamic loader.
++`panic = "abort"` is the only panic strategy, because no unwinder is linked yet,
++and backtraces are reported as unsupported. Calls the kernel does not implement
++yet fail at run time with `ENOSYS`.
++
++The linker is `aarch64-unknown-minixrs-clang`, the SDK's clang under its
++triple-prefixed name, which must be on `PATH`.
++
++## Building the target
++
++Against the SDK's LLVM:
++
++```toml
++[build]
++target = ["aarch64-apple-darwin", "aarch64-unknown-minixrs"]
++
++[target.aarch64-apple-darwin]
++llvm-config = "<sdk>/bin/llvm-config"
++
++[target.aarch64-unknown-minixrs]
++cc = "<sdk>/bin/aarch64-unknown-minixrs-clang"
++ar = "<sdk>/bin/llvm-ar"
++ranlib = "<sdk>/bin/llvm-ranlib"
++linker = "<sdk>/bin/aarch64-unknown-minixrs-clang"
++```
++
++```sh
++./x build --stage 1 library
++```
++
++## Building Rust programs
++
++```sh
++cargo +minixrs build --target aarch64-unknown-minixrs
++```
++
++## Testing
++
++There is no test runner for this target.
++
++## Cross-compilation toolchains and C code
++
++C code is compiled with the SDK's clang, `--target=aarch64-unknown-minixrs`.
+diff --git a/src/librustdoc/clean/cfg.rs b/src/librustdoc/clean/cfg.rs
+index 74a04b44..ddf0150c 100644
+--- a/src/librustdoc/clean/cfg.rs
++++ b/src/librustdoc/clean/cfg.rs
+@@ -635,6 +635,7 @@ fn human_readable_target_os(os: Symbol) -> Option<&'static str> {
+         LynxOs178 => "LynxOS-178",
+         MacOs => "macOS",
+         Managarm => "Managarm",
++        Minixrs => "minixrs",
+         Motor => "Motor OS",
+         NetBsd => "NetBSD",
+         None => "bare-metal",
+diff --git a/tests/assembly-llvm/targets/targets-elf.rs b/tests/assembly-llvm/targets/targets-elf.rs
+index 15da0222..2b9aa1fa 100644
+--- a/tests/assembly-llvm/targets/targets-elf.rs
++++ b/tests/assembly-llvm/targets/targets-elf.rs
+@@ -64,6 +64,9 @@
+ //@ revisions: aarch64_unknown_managarm_mlibc
+ //@ [aarch64_unknown_managarm_mlibc] compile-flags: --target aarch64-unknown-managarm-mlibc
+ //@ [aarch64_unknown_managarm_mlibc] needs-llvm-components: aarch64
++//@ revisions: aarch64_unknown_minixrs
++//@ [aarch64_unknown_minixrs] compile-flags: --target aarch64-unknown-minixrs
++//@ [aarch64_unknown_minixrs] needs-llvm-components: aarch64
+ //@ revisions: aarch64_unknown_netbsd
+ //@ [aarch64_unknown_netbsd] compile-flags: --target aarch64-unknown-netbsd
+ //@ [aarch64_unknown_netbsd] needs-llvm-components: aarch64
+diff --git a/tests/ui/check-cfg/cfg-crate-features.stderr b/tests/ui/check-cfg/cfg-crate-features.stderr
+index 9bf3cef4..f89933eb 100644
+--- a/tests/ui/check-cfg/cfg-crate-features.stderr
++++ b/tests/ui/check-cfg/cfg-crate-features.stderr
+@@ -24,7 +24,7 @@ warning: unexpected `cfg` condition value: `does_not_exist`
+ LL | #![cfg(not(target(os = "does_not_exist")))]
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+    |
+-   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, `rtems`, and `solaris` and 15 more
++   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `minixrs`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, and `rtems` and 16 more
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+ 
+diff --git a/tests/ui/check-cfg/well-known-values.stderr b/tests/ui/check-cfg/well-known-values.stderr
+index 693833de..90f23f63 100644
+--- a/tests/ui/check-cfg/well-known-values.stderr
++++ b/tests/ui/check-cfg/well-known-values.stderr
+@@ -221,7 +221,7 @@ warning: unexpected `cfg` condition value: `_UNEXPECTED_VALUE`
+ LL |     target_os = "_UNEXPECTED_VALUE",
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+-   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, `rtems`, `solaris`, `solid_asp3`, `teeos`, `trusty`, `tvos`, `uefi`, `unknown`, `vexos`, `visionos`, `vita`, `vxworks`, `wasi`, `watchos`, `windows`, `xous`, and `zkvm`
++   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `minixrs`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, `rtems`, `solaris`, `solid_asp3`, `teeos`, `trusty`, `tvos`, `uefi`, `unknown`, `vexos`, `visionos`, `vita`, `vxworks`, `wasi`, `watchos`, `windows`, `xous`, and `zkvm`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg.html> for more information about checking conditional configuration
+ 
+ warning: unexpected `cfg` condition value: `_UNEXPECTED_VALUE`
+@@ -294,7 +294,7 @@ LL | #[cfg(target_os = "linuz")] // testing that we suggest `linux`
+    |                   |
+    |                   help: there is a expected value with a similar name: `"linux"`
+    |
+-   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, `rtems`, `solaris`, `solid_asp3`, `teeos`, `trusty`, `tvos`, `uefi`, `unknown`, `vexos`, `visionos`, `vita`, `vxworks`, `wasi`, `watchos`, `windows`, `xous`, and `zkvm`
++   = note: expected values for `target_os` are: `aix`, `amdhsa`, `android`, `cuda`, `cygwin`, `dragonfly`, `emscripten`, `espidf`, `freebsd`, `fuchsia`, `haiku`, `helenos`, `hermit`, `horizon`, `hurd`, `illumos`, `ios`, `l4re`, `linux`, `lynxos178`, `macos`, `managarm`, `minixrs`, `motor`, `netbsd`, `none`, `nto`, `nuttx`, `openbsd`, `psp`, `psx`, `qnx`, `qurt`, `redox`, `rtems`, `solaris`, `solid_asp3`, `teeos`, `trusty`, `tvos`, `uefi`, `unknown`, `vexos`, `visionos`, `vita`, `vxworks`, `wasi`, `watchos`, `windows`, `xous`, and `zkvm`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg.html> for more information about checking conditional configuration
+ 
+ warning: 30 warnings emitted

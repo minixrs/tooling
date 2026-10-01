@@ -24,10 +24,10 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 - minixrs pins `nightly-2026-07-23` (rustc 1.99.0-nightly, commit `6f72b5dd5`,
   **LLVM 22.1.8**) with `rust-src` + `llvm-tools` — so the LLVM fork targets
   `release/22.x` and the same patch series later serves rustc.
-- minixrs phase 5 (musl + FS) is in progress at slice 5.7. Slice 5.6 shipped
-  2026-07-26 (minixrs PR #47), so **the ABI freeze is in effect**: `Message`
-  layout, call numbers, endpoints and errnos now change only via a deliberate
-  ABI-bump PR touching both repos. exec-from-FS is still slice 5.9.
+- minixrs phase 5 (musl + FS) is complete, exec-from-FS (slice 5.9) included.
+  Slice 5.6 shipped 2026-07-26 (minixrs PR #47), so **the ABI freeze is in
+  effect**: `Message` layout, call numbers, endpoints and errnos now change
+  only via a deliberate ABI-bump PR touching both repos.
 - Cross-repo rule: minixrs/fork changes are planned here but implemented in
   separate sessions inside those repos.
 
@@ -65,9 +65,13 @@ The whole of it, in order. Detail for each lives in its phase section below.
 - [x] P3d: rebuild the SDK — clang without 0006, then the musl sysroot
 - [x] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the
       rebuilt SDK's images and the minixrs repo's own images
-- [ ] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
-- [ ] P4 / M4–M5: Rust std — libc-minixrs, then rust-minixrs, then the rustup
-      link (four steps, detailed in the P4 section)
+- [x] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
+- [x] P4a: libc-minixrs — the fork, and `verify/check-libc-abi.sh` green
+- [ ] P4b: rust-minixrs — target spec and std port; `./x build --stage 1
+      library` succeeds for host and target
+- [ ] P4c / M5: `scripts/build-rust.sh` and `verify/check-rust.sh` — a bare
+      `cargo +minixrs build --target aarch64-unknown-minixrs` links a branded
+      hello, installed at `$MINIXRS_SDK/share/minixrs/hello-rs`
 
 ## Phase graph
 
@@ -76,10 +80,14 @@ P0  tooling bootstrap (this repo)                            ✓ shipped (commit
 P1  [minixrs] M1: triple JSON + build-std + notes + kernel   ✓ shipped (PR #44, merged 2026-07-25)
 P2a [tooling] llvm fork bring-up: volume, fork, baseline     ✓ shipped (commit bd49a45, 2026-07-25)
 P2b [llvm-minixrs] M2: the patch series — triple + driver    ✓ shipped (PR #1, merged 2026-07-26)
-P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ✓ shipped — P3a (PR #3), P3b (PR #4), P3c (minixrs PR #50); M3a closed. P3d drops the image-base pin — boxes above
-P4  [libc-minixrs + rust-minixrs] M4/M5: std PAL, rustup link   boxes above; the slice 5.6 ABI freeze is in effect, M3b rides with minixrs slice 5.9
-P5  upstreaming: LLVM triple + rustc tier-3 (optional)          — needs M2–M5 stability
+P3  [musl-minixrs + tooling] M3: real-triple sysroot, C hello   ✓ shipped — P3a (PR #3), P3b (PR #4), P3c (minixrs PR #50); M3a closed. P3d dropped the image-base pin — boxes above
+P4  [libc-minixrs + rust-minixrs + tooling] M5: Rust std builds and links   boxes above
 ```
+
+Phases after P4 are not drawn yet. A std program has to *boot* (M4), and then
+libc-minixrs and the std port widen over several phases as the kernel grows;
+each becomes a roadmap phase when it is specced. Upstreaming, formerly P5, is
+archived in [archive/upstreaming.md](archive/upstreaming.md) until those are done.
 
 **P2 is split into P2a/P2b deliberately.** The bring-up half (volume, fork,
 tooling, baseline build) and the patch half land in different repos in
@@ -196,7 +204,7 @@ triple. The port itself was never the remaining work; the toolchain flavor was.
 
 Three parts, in three repos, landed M3a. A fourth, **P3d**, drops the
 image-base pin now that minixrs's user VA map change has landed — it is not in
-this table because it is not finished; its boxes are under
+this table because its status is a checkbox; its boxes are under
 [Open work](#open-work).
 
 | Part | Status |
@@ -317,35 +325,20 @@ verify/check-driver.sh                 # crt/sysroot assertions ACTIVE since P3a
 scripts/build-sysroot.sh --skip-musl   # green since P3b — installs the hello
 ```
 
-## P4 — M4/M5: Rust std (libc-minixrs + rust-minixrs) — blocked on P3
+## P4 — M5: Rust std builds and links (libc-minixrs + rust-minixrs + tooling)
 
-The slice 5.6 ABI freeze this waited on is **in effect** as of 2026-07-26, so
-the only remaining gate is P3. Order:
+Design: [superpowers/specs/2026-09-30-p4-rust-std-design.md](superpowers/specs/2026-09-30-p4-rust-std-design.md)
+— the locked decisions, the three slices and their gates, and the ledger of
+what P4 knowingly leaves for later. This section does not restate it.
 
-1. **libc-minixrs**: `src/unix/minixrs/` mirroring the musl-aarch64
-   definitions, D7/D8 errno parity; extend minixrs gen-c-headers with a
-   Rust-consts emitter as a CI diff gate.
-2. **rust-minixrs** at pin commit `6f72b5dd5`: `rustc_target` base + target
-   spec (`os: "minixrs"`, **`env: ""`** — not `"musl"`, which would drag in
-   Linux-musl ecosystem cfg paths; `families: ["unix"]`, static-crt,
-   rust-lld; `llvm-target` now `aarch64-unknown-minixrs`). std reuses
-   `sys/pal/unix` with `target_os` branches (crib the recent Hurd/Cygwin
-   tier-3 PRs). musl provides all symbols, so kernel gaps surface as runtime
-   `ENOSYS` errors (e.g. `thread::spawn` → `Err`), not compile errors.
-3. Build rustc against the installed llvm-minixrs via `bootstrap.toml`
-   `llvm-config` — no second LLVM build. (Patching the `src/llvm-project`
-   submodule is the documented fallback.)
-4. `./x build library`; `rustup toolchain link minixrs …/stage2`.
+P4 ends at **M5**: a bare `cargo +minixrs build --target aarch64-unknown-minixrs`,
+no JSON and no build-std, links a branded hello that passes the host checks.
+**M4 — a std hello that boots — is not in P4.** It needs `brk`/`mmap` from
+minixrs's pre-Phase-6 chunk 5 and opens the phase after this one.
 
-**M4 gate**: std hello world on minixrs.
-**M5 gate**: bare `cargo +minixrs build --target aarch64-unknown-minixrs`
-with no JSON and no build-std — then delete the JSON + check-cfg shims from
-minixrs.
-
-## P5 — upstreaming (optional) — blocked on M2–M5 stability
-
-Upstream the LLVM triple, then propose rustc tier-3. Needs M2–M5 stability
-and a public story for the OS. No schedule.
+Two consequences of P3c carry in unchanged: minixrs probes `$MINIXRS_SDK` for
+exactly three files, and minixrs keeps its target JSON and check-cfg shims
+through P4.
 
 ## Risk register
 
@@ -364,3 +357,4 @@ and a public story for the OS. No schedule.
 | An image collides with the stack region | the process overwrites its own text at first push; no loader error | **Resolved by P3d.** minixrs relocated the initial stack to the top of user VA (`[0x3FFF_0000, 0x4000_0000)`, guard page below); `verify/check-image.sh` enforces `vend <= USER_REGION_LIMIT` (`0x3FFE_F000`), leaving ~1 GiB of room below it for any image, on either base |
 | The `check-image.sh` VA constants are copies of minixrs' | a VA-map change in minixrs silently invalidates the checker | each constant is annotated with its defining file in minixrs; re-check on any uspace change (`USER_REGION_LIMIT`, `kernel-shared/src/uspace.rs`; `USER_VA_TOP` and `USER_PAGE_SIZE`, `kernel-shared/src/message.rs`) |
 | `env: ""` vs `"musl"` in the P4 target spec | crates.io cfg probes misfire | keep `env` empty; audit `cfg(target_env)` usage in early ports |
+| P4's `hello-rs` passes every host check and is still wrong at runtime | found only when M4 boots it | accepted by the P4 design (R1); the host checks prove brand, layout and link closure, not behavior |

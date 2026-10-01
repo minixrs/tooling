@@ -14,7 +14,10 @@ is [docs/abi-note.md](docs/abi-note.md).
 ## Repo map
 
 ```
-docs/roadmap.md              phases P0–P5, milestone gates, risk register
+docs/roadmap.md              phases P0–P4, milestone gates, risk register
+docs/superpowers/specs/      per-phase designs (P4 onward)
+docs/superpowers/plans/      per-slice implementation plans (P4 onward)
+docs/archive/                work that is deliberately unscheduled (upstreaming)
 docs/abi-note.md             normative PT_NOTE brand spec (byte-exact)
 docs/sysroot-layout.md       $MINIXRS_SDK layout contract
 docs/plans/minixrs-m1.md     M1 implementation plan — execute in ~/src/minixrs
@@ -33,6 +36,7 @@ verify/check-brand.sh        PT_NOTE brand verifier — works today on any ELF
 verify/check-image.sh        the kernel loader's rules, checked on the host
 verify/selftest.sh           builds fixtures and exercises both verifiers
 verify/check-driver.sh       the M2 gate: does clang know the triple?
+verify/check-libc-abi.sh     the P4a gate: libc-minixrs vs the sysroot's C headers
 ```
 
 ## Fork checkouts
@@ -57,7 +61,7 @@ those repos.
 
 | Repo | What | Created in |
 |---|---|---|
-| `~/src/minixrs` | the OS (phase 5 in progress) — **not** a fork, stays a sibling of this repo (`$MINIXRS_SRC`) | exists |
+| `~/src/minixrs` | the OS (phase 5 complete) — **not** a fork, stays a sibling of this repo (`$MINIXRS_SRC`) | exists |
 | `$MINIXRS_FORKS_DIR/llvm-minixrs` | llvm-project fork at `llvmorg-22.1.8`, branch `minixrs/release/22.x` | P2 |
 | `$MINIXRS_FORKS_DIR/musl-minixrs` | musl fork at `v1.2.6`, branch `minixrs` (crt1 carries the brand) | exists |
 | `$MINIXRS_FORKS_DIR/rust-minixrs` | rust fork at pin commit `6f72b5dd5` | P4 |
@@ -113,15 +117,13 @@ See [docs/roadmap.md](docs/roadmap.md). Status there is a GFM checkbox and
 nothing else — the first unchecked box under **Open work** is what to pick up
 next. This file deliberately keeps no copy of it.
 
-Where the phases stand in outline: P0–P2b and M3a are done (the SDK builds a
-branded `hello` from one `clang --target=aarch64-unknown-minixrs` call);
-**P3d**, dropping LLVM patch 0006's image-base pin for minixrs's new user VA
-map, is partly done and holds the next few boxes; **P4/M4–M5** (Rust `std` via
-libc-minixrs and rust-minixrs) is the milestone after it. Per-milestone detail:
-[minixrs-m1.md](docs/plans/minixrs-m1.md), [llvm-m2.md](docs/plans/llvm-m2.md),
-[musl-m3.md](docs/plans/musl-m3.md).
+Per-milestone detail: [minixrs-m1.md](docs/plans/minixrs-m1.md),
+[llvm-m2.md](docs/plans/llvm-m2.md), [musl-m3.md](docs/plans/musl-m3.md), and
+from P4 on the designs under [docs/superpowers/specs/](docs/superpowers/specs/)
+— P4 is [Rust `std`, build and link](docs/superpowers/specs/2026-09-30-p4-rust-std-design.md).
 
 `patches/*/` is `git format-patch` output, re-exported by
 `scripts/export-patches.sh` after every fork rebase. `llvm/` holds 5 patches
-(0001–0005 from P2b; 0006, the P3b image base, was dropped by P3d) and
-`musl/` the port series; the rest stay empty until their fork exists.
+(0001–0005 from P2b; 0006, the P3b image base, was dropped by P3d), `musl/`
+the port series, and `libc/` 2 patches (P4a); `rust/` stays empty until its
+fork exists.

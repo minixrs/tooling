@@ -1,0 +1,106 @@
+From 5271e78c80975c25b107b16e2527a47e4370da5b Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Thu, 1 Oct 2026 00:54:55 -0500
+Subject: [PATCH 1/2] minixrs: register target_os = "minixrs"
+
+Selects an (empty) src/unix/minixrs module and supplies the unistd module
+the Unix family re-exports, which no target_env arm provides because this
+target's env is empty.
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ build.rs                  |  1 +
+ src/new/minixrs/mod.rs    |  5 +++++
+ src/new/minixrs/unistd.rs |  7 +++++++
+ src/new/mod.rs            |  3 +++
+ src/unix/minixrs/mod.rs   | 11 +++++++++++
+ src/unix/mod.rs           |  3 +++
+ 6 files changed, 30 insertions(+)
+ create mode 100644 src/new/minixrs/mod.rs
+ create mode 100644 src/new/minixrs/unistd.rs
+ create mode 100644 src/unix/minixrs/mod.rs
+
+diff --git a/build.rs b/build.rs
+index 34df96aa..093f22cf 100644
+--- a/build.rs
++++ b/build.rs
+@@ -43,6 +43,7 @@ const CHECK_CFG_EXTRA: &[(&str, &[&str])] = &[
+         "target_os",
+         &[
+             "switch", "aix", "ohos", "hurd", "rtems", "visionos", "nuttx", "cygwin", "qurt",
++            "minixrs",
+         ],
+     ),
+     (
+diff --git a/src/new/minixrs/mod.rs b/src/new/minixrs/mod.rs
+new file mode 100644
+index 00000000..7612e586
+--- /dev/null
++++ b/src/new/minixrs/mod.rs
+@@ -0,0 +1,5 @@
++//! minixrs: musl-minixrs (musl 1.2.6) over the minixrs IPC layer.
++//!
++//! * Headers: <https://github.com/minixrs/musl-minixrs>
++
++pub(crate) mod unistd;
+diff --git a/src/new/minixrs/unistd.rs b/src/new/minixrs/unistd.rs
+new file mode 100644
+index 00000000..8d55ee58
+--- /dev/null
++++ b/src/new/minixrs/unistd.rs
+@@ -0,0 +1,7 @@
++//! Header: `unistd.h`
++
++pub use crate::new::common::posix::unistd::{
++    STDERR_FILENO,
++    STDIN_FILENO,
++    STDOUT_FILENO,
++};
+diff --git a/src/new/mod.rs b/src/new/mod.rs
+index 1c5d6a6e..64225c6d 100644
+--- a/src/new/mod.rs
++++ b/src/new/mod.rs
+@@ -90,6 +90,9 @@ cfg_if! {
+     } else if #[cfg(target_os = "linux")] {
+         mod linux_uapi;
+         pub(crate) use linux_uapi::*;
++    } else if #[cfg(target_os = "minixrs")] {
++        mod minixrs;
++        pub(crate) use minixrs::*;
+     } else if #[cfg(target_os = "netbsd")] {
+         mod netbsd;
+         pub(crate) use netbsd::*;
+diff --git a/src/unix/minixrs/mod.rs b/src/unix/minixrs/mod.rs
+new file mode 100644
+index 00000000..9e0010a2
+--- /dev/null
++++ b/src/unix/minixrs/mod.rs
+@@ -0,0 +1,11 @@
++//! minixrs, aarch64: definitions for musl-minixrs (musl 1.2.6).
++//!
++//! musl-minixrs leaves musl's aarch64 type layouts and constants untouched,
++//! so everything here is the Linux-musl-aarch64 definition, copied from
++//! `src/unix/linux_like/`. Nothing here is derived by hand from a header.
++//!
++//! Every `pub type`, `pub struct` and `pub const` in this module is checked
++//! against the C headers by `verify/check-libc-abi.sh` in the minixrs tooling
++//! repo. Adding an item here without adding it to that manifest fails the gate.
++
++use crate::prelude::*;
+diff --git a/src/unix/mod.rs b/src/unix/mod.rs
+index 207c36b8..8d3d7227 100644
+--- a/src/unix/mod.rs
++++ b/src/unix/mod.rs
+@@ -2494,6 +2494,9 @@ cfg_if! {
+     } else if #[cfg(target_os = "nuttx")] {
+         mod nuttx;
+         pub use self::nuttx::*;
++    } else if #[cfg(target_os = "minixrs")] {
++        mod minixrs;
++        pub use self::minixrs::*;
+     } else {
+         // Unknown target_os
+     }
+-- 
+2.55.0
+

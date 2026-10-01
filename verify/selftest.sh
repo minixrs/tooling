@@ -50,6 +50,14 @@
 #   --image-base=0x3FFF0000 → exit 1  (boot-module-on-stack: every other rule
 #                              still applies under the flag)
 #
+# compare.sh, the libc ABI table comparer behind check-libc-abi.sh — four
+# fabricated tables, no SDK and no fork checkout needed:
+#
+#   identical tables        → exit 0
+#   one differing entry     → exit 1, naming that entry's label
+#   a short table           → exit 2 (malformed, not a mismatch)
+#   an empty table          → exit 2 (nothing compared is not a pass)
+#
 # Those eleven link with the same -z flags the MinixRS driver passes
 # (docs/sysroot-layout.md), because without them lld packs loadable segments
 # so that only p_offset ≡ p_vaddr (mod page) holds — neither is page-aligned,
@@ -72,6 +80,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK_BRAND="$SCRIPT_DIR/check-brand.sh"
 CHECK_IMAGE="$SCRIPT_DIR/check-image.sh"
+COMPARE="$SCRIPT_DIR/libc-abi/compare.sh"
 SDK="${MINIXRS_SDK:-$HOME/toolchains/minixrs}"
 
 # What the MinixRS toolchain adds to every link (minixrs D13). Modelling it
@@ -224,6 +233,38 @@ verdict() { # <label> <expected rc> <expected reason> [check-image flags...] —
     echo "selftest: PASS $label (exit $rc, \"$want_msg\")"
 }
 
+# compare.sh, the comparer behind check-libc-abi.sh. The tables are fabricated
+# here, so these fixtures need neither an SDK nor a libc-minixrs checkout —
+# which is the point of compare.sh being its own script.
+u64s() { # <file> [value...] — write raw little-endian u64s
+    local f="$1" v
+    shift
+    : > "$f"
+    for v in "$@"; do
+        # shellcheck disable=SC2059 # the format *is* the byte string
+        printf "$(le_bytes "$v" 8)" >> "$f"
+    done
+}
+
+expect_compare() { # <label> <expected rc> <expected message> <c.bin> <rust.bin>
+    local label="$1" want_rc="$2" want_msg="$3" out rc=0
+    out="$("$COMPARE" "$4" "$5" "$tmp/abi.labels" 2>&1)" || rc=$?
+    if [ "$rc" -ne "$want_rc" ]; then
+        echo "selftest: FAIL $label (exit $rc, expected $want_rc)" >&2
+        detail <<<"$out"
+        fail=1
+        return
+    fi
+    if ! grep -qF -- "$want_msg" <<<"$out"; then
+        echo "selftest: FAIL $label (exit $rc as expected, but not for the reason under test)" >&2
+        echo "selftest:   wanted: $want_msg" >&2
+        detail <<<"$out"
+        fail=1
+        return
+    fi
+    echo "selftest: PASS $label (exit $rc, \"$want_msg\")"
+}
+
 expect branded 0
 expect unbranded 1
 expect badabi 2
@@ -246,6 +287,22 @@ expect_boot_module boot-module      0 "LOADABLE"                       branded \
     -T "$SCRIPT_DIR/testdata/boot-module.ld"
 expect_boot_module boot-module-on-stack 1 "reaches the stack guard page" branded \
     --image-base=0x3FFF0000
+
+printf '%s\n' "7: sizeof stat" "7: offsetof stat.st_size" "9: value NCCS" > "$tmp/abi.labels"
+u64s "$tmp/abi-c.bin"     128 48 32
+u64s "$tmp/abi-same.bin"  128 48 32
+u64s "$tmp/abi-off.bin"   128 56 32
+u64s "$tmp/abi-short.bin" 128 48
+expect_compare abi-identical 0 "3 entries identical" \
+    "$tmp/abi-c.bin" "$tmp/abi-same.bin"
+expect_compare abi-mismatch  1 "MISMATCH 7: offsetof stat.st_size: C=0x30 Rust=0x38" \
+    "$tmp/abi-c.bin" "$tmp/abi-off.bin"
+expect_compare abi-truncated 2 "is 16 bytes, expected 24 (3 entries)" \
+    "$tmp/abi-c.bin" "$tmp/abi-short.bin"
+: > "$tmp/abi.labels"
+u64s "$tmp/abi-empty.bin"
+expect_compare abi-empty     2 "empty table" \
+    "$tmp/abi-empty.bin" "$tmp/abi-empty.bin"
 
 if [ "$fail" -eq 0 ]; then
     echo "selftest: all fixtures passed"

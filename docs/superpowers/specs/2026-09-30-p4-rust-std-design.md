@@ -24,10 +24,16 @@ P4 is the first of several Rust phases. Later phases widen libc-minixrs and the 
 kernel grows; upstreaming is archived in [`docs/archive/upstreaming.md`](../../archive/upstreaming.md)
 until those are done.
 
+## The pin
+
+P4b and P4c build at **`nightly-2026-10-01`**: rustc 1.101.0, commit `21b707e3f`, LLVM 23.1.1, and std pins libc **0.2.189**. That moved from `nightly-2026-07-23` before P4b started, ruled on 2026-10-01, and the minixrs repo moves in lockstep, so the kernel and rust-minixrs share one pin. P4a shipped at the old pin and its libc base 0.2.185; P4b rebases libc-minixrs onto 0.2.189.
+
+**The SDK's LLVM stays at 22.1.8**, one major behind the nightly's own. The pinned rustc accepts an external LLVM from 21 up, and rust-lang's CI tests 21 and 22 (R10). Rebasing llvm-minixrs to 23 is a separate, P3-sized job, and nothing in P4 needs it.
+
 ## Why the boot is not in P4
 
-Verified against the pinned nightly's `library/` (`nightly-2026-07-23`), the musl fork, and the
-minixrs trackers on 2026-09-29:
+Verified on 2026-09-29 against the musl fork, the minixrs trackers, and `library/` at the then
+pin (`nightly-2026-07-23`). Both std sites below are unchanged at `nightly-2026-10-01`:
 
 - **`malloc` has no memory.** `musl-minixrs`'s `src/minixrs/_syscall.c` dispatches six calls
   (`writev`, `write`, `exit`, `exit_group`, `set_tid_address`, `ioctl`); its default arm returns
@@ -54,9 +60,9 @@ verified on the host.
 | **R7** | The libc ABI gate is a **host-side byte comparison** of C-emitted and Rust-emitted tables (`verify/check-libc-abi.sh`). | The roadmap's "Rust-consts emitter in minixrs gen-c-headers" — needs a minixrs change, and covers constants only. Errno parity is already transitive: `abi-selftest.c` proves musl's errnos equal minixrs's, and R7 proves libc-minixrs's equal musl's. |
 | **R8** | Build **stage 1**: a stage-1 rustc plus stage-1 std for host and target. | Stage 2 — roughly double the build, and only needed to ship a compiler. |
 | **R9** | The toolchain is **installed to `$MINIXRS_SDK/rust/`** and rustup links that. | Linking the build tree on the forks volume — breaks `cargo +minixrs` whenever the volume is unmounted, against the `MINIXRS_SDK` contract. |
-| **R10** | rustc links the **installed llvm-minixrs** through `llvm-config`. The SDK's LLVM is 22.1.8, static, AArch64-only; the host is AArch64 too, so one backend serves both. | Patching `src/llvm-project` and building LLVM again — stays the documented fallback if the external LLVM is rejected. |
+| **R10** | rustc links the **installed llvm-minixrs** through `llvm-config`. The SDK's LLVM is 22.1.8, static, AArch64-only; the host is AArch64 too, so one backend serves both. The pinned rustc's own LLVM is 23.1.1, but it accepts an external LLVM from 21 up ([The pin](#the-pin)). | Patching `src/llvm-project` and building LLVM again — stays the documented fallback if the external LLVM is rejected. |
 | **R11** | minixrs **keeps** its target JSON and `check-cfg` shims through P4. | Deleting them at M5 as the roadmap said — minixrs CI would then need the fork toolchain, which has no runner story. Owed later. |
-| **R12** | rust-minixrs pins libc-minixrs by **git tag** (`minixrs-0.2.185-N`) in `library/Cargo.toml`'s existing `[patch.crates-io]`. | A branch or bare SHA — fork branches are force-pushed, so a SHA can be orphaned. A path dependency — makes the exported patch series unbuildable elsewhere. |
+| **R12** | rust-minixrs pins libc-minixrs by **git tag** (`minixrs-0.2.189-N`) in `library/Cargo.toml`'s existing `[patch.crates-io]`. | A branch or bare SHA — fork branches are force-pushed, so a SHA can be orphaned. A path dependency — makes the exported patch series unbuildable elsewhere. |
 
 ## Slices
 
@@ -74,9 +80,10 @@ cannot finish until a libc-minixrs tag exists.
 
 ## P4a — libc-minixrs
 
-- **Fork:** `minixrs/libc-minixrs`, from `rust-lang/libc` tag `0.2.185` — the version std pins in
-  `library/Cargo.lock`. Branch `minixrs/0.2.185`, rebase-maintained, force-pushed; tags
-  `minixrs-0.2.185-N` are never moved.
+- **Fork:** `minixrs/libc-minixrs`, from `rust-lang/libc` tag `0.2.185`, the version std pinned
+  in `library/Cargo.lock` at the old nightly. Branch `minixrs/0.2.185`, with tags `minixrs-0.2.185-N`
+  that are never moved. P4b rebases the series onto `0.2.189`, the new pin's version, as branch
+  `minixrs/0.2.189` with tags `minixrs-0.2.189-N`. The old branch and tags stay as history.
 - **Content:** one self-contained module, `src/unix/minixrs/`, plus three registration points:
   `build.rs`, `src/unix/mod.rs`, and `src/new/mod.rs` with a small `src/new/minixrs/`. The last
   is not optional the way Hurd's is: the Unix family re-exports a `unistd` module that normally
@@ -121,8 +128,8 @@ hide behind a checked one.
 
 ## P4b — rust-minixrs
 
-- **Fork:** `minixrs/rust-minixrs` at commit `6f72b5dd5` (the pinned nightly). Branch
-  `minixrs/nightly-2026-07-23`, rebase-maintained; series exported to `patches/rust/`.
+- **Fork:** `minixrs/rust-minixrs` at commit `21b707e3f` (the pinned nightly). Branch
+  `minixrs/nightly-2026-10-01`, rebase-maintained; series exported to `patches/rust/`.
 
 ### Target spec
 
@@ -161,16 +168,17 @@ an explicit OS list; minixrs is not on it and gets the no-op. The edits:
 | `std/build.rs` | Added to the "no special requirements" list | std refuses to build otherwise |
 | `os/mod.rs`, new `os/minixrs/{mod,fs,raw}.rs` | `std::os::minixrs`, mirroring `os/hurd` | R6, compile |
 | `sys/{args,env_consts,fd,fs,paths,pipe,thread,net}`, `os/unix` | minixrs takes the arm linux-musl takes where Hurd's arm is a POSIX or musl path; not glibc's `*64` aliases or Hurd-only items. The P4b plan decides every site | R6, compile; R4 |
-| `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.185-N" }`; `Cargo.lock` regenerated | R12 |
+| `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.189-N" }`; `Cargo.lock` regenerated | R12 |
 
-The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (26 files, 83 hits at the
-pin) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
+The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (35 files, 111 hits at the
+pin, 32 of them doc-test attributes in `os/hurd/fs.rs`) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
 prompt to look, not a rule to copy. The compiler side also needs the target registered with
 bootstrap's sanity check, since the stage-0 compiler does not know the triple, and a display name
 in rustdoc's exhaustive match on `Os`.
 
 std also needs more of libc-minixrs than P4a seeded: about 180 constants, functions and socket
-structs, which P4b adds under the same parity gate and releases as `minixrs-0.2.185-2`.
+structs, which P4b adds under the same parity gate on the 0.2.189 rebase and releases as
+`minixrs-0.2.189-1`.
 
 ## P4c — tooling
 
@@ -212,7 +220,8 @@ the source, per `CLAUDE.md`'s "a new test that passes on its first run has not b
 ### Other tooling edits
 
 - `scripts/export-patches.sh` already has `rust` and `libc` arms. (The `libc` base default
-  moved from `upstream/main` to `0.2.185` in P4a; the `rust` default is already the pin.)
+  moved from `upstream/main` to `0.2.185` in P4a, and P4b moves it to `0.2.189` and the `rust`
+  default to `21b707e3f`.)
 - `docs/sysroot-layout.md` gains `rust/` and `share/minixrs/hello-rs`.
 - The `bin/aarch64-unknown-minixrs-clang` symlink the target spec names (R2) is installed by
   `scripts/build-llvm.sh` and checked by `verify/check-driver.sh`; P4b adds it, because the

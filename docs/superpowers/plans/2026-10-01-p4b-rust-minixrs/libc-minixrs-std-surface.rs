@@ -30,6 +30,7 @@ pub const EISDIR: c_int = 21;
 pub const ELOOP: c_int = 40;
 pub const EMFILE: c_int = 24;
 pub const EMLINK: c_int = 31;
+pub const EMSGSIZE: c_int = 90;
 pub const ENAMETOOLONG: c_int = 36;
 pub const ENETDOWN: c_int = 100;
 pub const ENETUNREACH: c_int = 101;
@@ -41,6 +42,7 @@ pub const ENOSYS: c_int = 38;
 pub const ENOTCONN: c_int = 107;
 pub const ENOTDIR: c_int = 20;
 pub const ENOTEMPTY: c_int = 39;
+pub const ENOTSUP: c_int = EOPNOTSUPP;
 pub const EOPNOTSUPP: c_int = 95;
 pub const EPERM: c_int = 1;
 pub const EPIPE: c_int = 32;
@@ -306,35 +308,35 @@ extern "C" {
 }
 
 safe_f! {
-    pub const fn WCOREDUMP(status: c_int) -> bool {
+    pub const safe fn WCOREDUMP(status: c_int) -> bool {
         (status & 0x80) != 0
     }
 
-    pub const fn WEXITSTATUS(status: c_int) -> c_int {
+    pub const safe fn WEXITSTATUS(status: c_int) -> c_int {
         (status >> 8) & 0xff
     }
 
-    pub const fn WIFCONTINUED(status: c_int) -> bool {
+    pub const safe fn WIFCONTINUED(status: c_int) -> bool {
         status == 0xffff
     }
 
-    pub const fn WIFEXITED(status: c_int) -> bool {
+    pub const safe fn WIFEXITED(status: c_int) -> bool {
         (status & 0x7f) == 0
     }
 
-    pub const fn WIFSIGNALED(status: c_int) -> bool {
+    pub const safe fn WIFSIGNALED(status: c_int) -> bool {
         ((status & 0x7f) + 1) as i8 >= 2
     }
 
-    pub const fn WIFSTOPPED(status: c_int) -> bool {
+    pub const safe fn WIFSTOPPED(status: c_int) -> bool {
         (status & 0xff) == 0x7f
     }
 
-    pub const fn WSTOPSIG(status: c_int) -> c_int {
+    pub const safe fn WSTOPSIG(status: c_int) -> c_int {
         (status >> 8) & 0xff
     }
 
-    pub const fn WTERMSIG(status: c_int) -> c_int {
+    pub const safe fn WTERMSIG(status: c_int) -> c_int {
         status & 0x7f
     }
 }

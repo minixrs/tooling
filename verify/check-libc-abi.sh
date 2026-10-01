@@ -8,9 +8,10 @@
 # field offsets and constants into a .minixrs_abi section. The two sections
 # are compared byte for byte.
 #
-# It also enforces coverage: every `pub type`, `pub struct` and `pub const` in
-# libc-minixrs' src/unix/minixrs/ must be in items.list or in allow.list, and
-# the module may carry no #[cfg]. Function declarations are not checked — a
+# It also enforces coverage: every public type, struct, union, enum, static and
+# const in libc-minixrs' minixrs modules (src/unix/minixrs/ and, when present,
+# src/new/minixrs/) must be in items.list or in allow.list, and neither module
+# may carry #[cfg] or #![cfg]. Function declarations are not checked — a
 # signature has no layout to compare — and the PASS line says how many.
 #
 # Exit: 0 parity; 1 a mismatch or an uncovered item; 2 a build or usage error.
@@ -34,6 +35,11 @@ TARGET_JSON="$SCRIPT_DIR/testdata/aarch64-unknown-minixrs-unix.json"
 LIBC_DIR="${MINIXRS_LIBC_DIR:-$MINIXRS_FORKS_DIR/libc-minixrs}"
 NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-07-23}"
 MODULE_DIR="$LIBC_DIR/src/unix/minixrs"
+# Every directory whose definitions reach the crate root as minixrs's own.
+# src/new/minixrs/ is upstream libc's preferred home for new definitions, so
+# anything added there is held to the same coverage rule.
+MODULE_DIRS=("$MODULE_DIR")
+[ -d "$LIBC_DIR/src/new/minixrs" ] && MODULE_DIRS+=("$LIBC_DIR/src/new/minixrs")
 
 die() { echo "check-libc-abi: $*" >&2; exit 2; }
 
@@ -51,26 +57,30 @@ cargo "+$NIGHTLY" --version >/dev/null 2>&1 ||
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-# --- coverage: nothing in the module escapes the manifest --------------------
+# --- coverage: nothing in the modules escapes the manifest -------------------
 listed() {
-    awk '$1 ~ /^(int|type|const|struct|typedef)$/ { print $2 }' "$ABI_DIR/items.list"
+    awk '$1 ~ /^(int|type|const|struct|union|typedef)$/ { print $2 }' "$ABI_DIR/items.list"
     awk '!/^[ \t]*(#|$)/ { print $1 }' "$ABI_DIR/allow.list"
 }
-find "$MODULE_DIR" -name '*.rs' -exec cat {} + |
-    sed -nE 's/^[[:space:]]*pub (type|struct|const) ([A-Za-z_][A-Za-z0-9_]*).*/\2/p' |
-    sort -u > "$work/defined"
+module_source() { find "${MODULE_DIRS[@]}" -name '*.rs' -exec cat {} +; }
+# Attributes may share the item's line (`#[doc(hidden)] pub type …`). A
+# `pub const fn` is a function, not a constant: it extracts as the name "fn"
+# and is dropped here, then counted with the other functions below.
+module_source |
+    sed -nE 's/^[[:space:]]*(#\[[^]]*\][[:space:]]*)*pub[[:space:]]+(unsafe[[:space:]]+)?(type|struct|union|enum|static|const)[[:space:]]+(mut[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*).*/\5/p' |
+    grep -vx 'fn' | sort -u > "$work/defined" || true
 listed | sort -u > "$work/listed"
-[ -s "$work/defined" ] || die "found no pub type/struct/const under $MODULE_DIR"
-# Coverage is by name, so one name must mean one definition. A #[cfg] in the
+[ -s "$work/defined" ] || die "found no public definitions under $MODULE_DIR"
+# Coverage is by name, so one name must mean one definition. A #[cfg] in a
 # module could hide a second, unchecked definition behind a checked one; the
-# module is aarch64-only and has no reason to carry one.
-if grep -rnE '#\[cfg(_attr)?\(' "$MODULE_DIR" >&2; then
-    echo "check-libc-abi: $MODULE_DIR carries #[cfg] — coverage by name cannot see past it" >&2
+# modules are aarch64-only and have no reason to carry one, inner or outer.
+if grep -rnE '#!?\[cfg(_attr)?\(' "${MODULE_DIRS[@]}" >&2; then
+    echo "check-libc-abi: a minixrs module carries #[cfg] — coverage by name cannot see past it" >&2
     exit 1
 fi
 comm -23 "$work/defined" "$work/listed" > "$work/uncovered"
 if [ -s "$work/uncovered" ]; then
-    echo "check-libc-abi: defined in $MODULE_DIR but in neither items.list nor allow.list:" >&2
+    echo "check-libc-abi: defined in ${MODULE_DIRS[*]} but in neither items.list nor allow.list:" >&2
     sed 's/^/  /' "$work/uncovered" >&2
     exit 1
 fi
@@ -82,8 +92,11 @@ awk -v c="$work/table.c" -v rs="$work/rs/src/lib.rs" -v labels="$work/labels" \
 
 # --- C side -------------------------------------------------------------------
 # _GNU_SOURCE because the libc crate mirrors musl's full view of each header
-# (tm_gmtoff, Dl_info), not the strict-ISO one.
-"$MINIXRS_SDK/bin/clang" --target=aarch64-unknown-minixrs -std=gnu11 -D_GNU_SOURCE \
+# (tm_gmtoff, Dl_info), not the strict-ISO one. The include-path variables are
+# cleared because clang searches them BEFORE the sysroot: an ambient header
+# would otherwise stand in for musl's on the C side of the comparison.
+env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
+    "$MINIXRS_SDK/bin/clang" --target=aarch64-unknown-minixrs -std=gnu11 -D_GNU_SOURCE \
     -Wall -Werror -c "$work/table.c" -o "$work/table.c.o" ||
     die "the C emitter did not compile — a manifest item the headers do not have?"
 
@@ -102,7 +115,14 @@ TOML
 (
     cd "$work/rs"
     # The ambient environment must not leak flags into a layout comparison.
-    unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET
+    # CARGO_ENCODED_RUSTFLAGS set-but-empty outranks every other rustflags
+    # source — RUSTFLAGS, CARGO_BUILD_RUSTFLAGS, and [build]/[target] rustflags
+    # in any config.toml — where unsetting it would let those through. An empty
+    # CARGO_BUILD_RUSTC_WRAPPER likewise disables a configured wrapper.
+    export CARGO_ENCODED_RUSTFLAGS=''
+    export CARGO_BUILD_RUSTC_WRAPPER='' CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=''
+    unset RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_BUILD_TARGET CARGO_BUILD_RUSTC \
+        RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER
     CARGO_TARGET_DIR="$work/target" cargo "+$NIGHTLY" rustc --quiet --release \
         -Zbuild-std=core --target "$TARGET_JSON" -- --emit=obj -C codegen-units=1
 ) || die "the Rust emitter did not compile — a manifest item libc-minixrs does not have?"
@@ -115,5 +135,5 @@ rs_obj="$(find "$work/target" -name 'minixrs_abi_table-*.o' | head -n 1)"
 "$MINIXRS_SDK/bin/llvm-objcopy" -O binary --only-section=.minixrs_abi "$rs_obj" "$work/rs.bin"
 "$ABI_DIR/compare.sh" "$work/c.bin" "$work/rs.bin" "$work/labels"
 # Say what was NOT checked, so a PASS is not read as covering signatures.
-fns="$(find "$MODULE_DIR" -name '*.rs' -exec cat {} + | grep -cE '^[[:space:]]*pub (unsafe )?fn ' || true)"
+fns="$(module_source | grep -cE '^[[:space:]]*pub[[:space:]]+((const|unsafe|safe|extern([[:space:]]+"[^"]*")?)[[:space:]]+)*fn[[:space:]]' || true)"
 echo "check-libc-abi: PASS ($(wc -l < "$work/defined" | tr -d ' ') module items covered; $fns function declarations not checked)"

@@ -61,7 +61,7 @@ those repos.
 
 | Repo | What | Created in |
 |---|---|---|
-| `~/src/minixrs` | the OS (phase 5 in progress) — **not** a fork, stays a sibling of this repo (`$MINIXRS_SRC`) | exists |
+| `~/src/minixrs` | the OS (phase 5 complete) — **not** a fork, stays a sibling of this repo (`$MINIXRS_SRC`) | exists |
 | `$MINIXRS_FORKS_DIR/llvm-minixrs` | llvm-project fork at `llvmorg-22.1.8`, branch `minixrs/release/22.x` | P2 |
 | `$MINIXRS_FORKS_DIR/musl-minixrs` | musl fork at `v1.2.6`, branch `minixrs` (crt1 carries the brand) | exists |
 | `$MINIXRS_FORKS_DIR/rust-minixrs` | rust fork at pin commit `6f72b5dd5` | P4 |

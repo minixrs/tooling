@@ -58,7 +58,7 @@
 #   a short table           → exit 2 (malformed, not a mismatch)
 #   an empty table          → exit 2 (nothing compared is not a pass)
 #
-# Those eleven link with the same -z flags the MinixRS driver passes
+# The eleven image fixtures above link with the same -z flags the MinixRS driver passes
 # (docs/sysroot-layout.md), because without them lld packs loadable segments
 # so that only p_offset ≡ p_vaddr (mod page) holds — neither is page-aligned,
 # and every fixture would "fail" for *that* rather than the rule under test.

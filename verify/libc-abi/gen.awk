@@ -22,6 +22,11 @@ function aggregate(ctype,    i, parts, rf, cf) {
         entry(FNR ": offsetof " $2 "." rf, \
               "offsetof(" ctype ", " cf ")", \
               "offset_of!(libc::" $2 ", " rf ")")
+        # The field's own width: an offset alone misses a field narrowed into
+        # trailing padding, or one whose successor's padding absorbs it.
+        entry(FNR ": sizeof " $2 "." rf, \
+              "sizeof(((" ctype " *)0)->" cf ")", \
+              "fsize(|s: &libc::" $2 "| &s." rf ")")
     }
 }
 
@@ -39,12 +44,13 @@ $1 == "int" || $1 == "type" {
 
 $1 == "const"   { entry(FNR ": value " $2, $2, "libc::" $2); next }
 $1 == "struct"  { aggregate("struct " $2); next }
+$1 == "union"   { aggregate("union " $2); next }
 $1 == "typedef" { aggregate($2); next }
 
 { printf "gen.awk: %s:%d: unknown kind '%s'\n", FILENAME, FNR, $1 > "/dev/stderr"; bad = 1 }
 
 END {
     if (bad) exit 2
-    printf "%s\n__attribute__((section(\".minixrs_abi\"), used))\nconst unsigned long long minixrs_abi_table[%d] = {\n%s};\n", includes, n, cbody > c
-    printf "#![no_std]\n#![allow(unused_comparisons, clippy::all)]\nuse core::mem::{align_of, offset_of, size_of};\n\n#[used]\n#[no_mangle]\n#[link_section = \".minixrs_abi\"]\npub static minixrs_abi_table: [u64; %d] = [\n%s];\n", n, rsbody > rs
+    printf "#include <stddef.h> /* offsetof, which this file emits */\n%s\n__attribute__((section(\".minixrs_abi\"), used))\nconst unsigned long long minixrs_abi_table[%d] = {\n%s};\n", includes, n, cbody > c
+    printf "#![no_std]\n#![allow(unused_comparisons, clippy::all)]\nuse core::mem::{align_of, offset_of, size_of};\n\n// The size of the field a projection closure selects.\nconst fn fsize<T, F>(_: fn(&T) -> &F) -> usize {\n    size_of::<F>()\n}\n\n#[used]\n#[no_mangle]\n#[link_section = \".minixrs_abi\"]\npub static minixrs_abi_table: [u64; %d] = [\n%s];\n", n, rsbody > rs
 }

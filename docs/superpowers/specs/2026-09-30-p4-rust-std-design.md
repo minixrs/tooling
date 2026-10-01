@@ -89,18 +89,22 @@ cannot finish until a libc-minixrs tag exists.
 
 ### The parity gate — `verify/check-libc-abi.sh`
 
-1. A tooling-owned manifest, `verify/libc-abi/items.list`, names every struct (with its fields)
-   and every constant in `src/unix/minixrs/`.
+1. A tooling-owned manifest, `verify/libc-abi/items.list`, names every type, struct and union
+   (with its fields) and every constant in libc-minixrs' minixrs modules — `src/unix/minixrs/`
+   and `src/new/minixrs/`.
 2. From the manifest the script generates two emitters. The C one is compiled by the SDK clang
    against the SDK sysroot (with `_GNU_SOURCE`, the view of the headers the libc crate mirrors);
    the Rust one against libc-minixrs. Each writes the same ordered table of `u64`s into a
-   `.minixrs_abi` section: `sizeof`, `alignof` and each field offset per struct; size, alignment
-   and signedness per integer type; and each constant's value.
+   `.minixrs_abi` section: `sizeof`, `alignof`, and each field's offset and size per aggregate;
+   size, alignment and signedness per integer type; and each constant's value. A field's
+   signedness is not compared — a field typed with the wrong-signed typedef of the right width
+   passes.
 3. Both objects are reduced to the raw bytes of that symbol with `llvm-objcopy` and compared. A
    mismatch reports the manifest line it corresponds to.
-4. **Coverage is enforced.** Every `pub struct` and `pub const` in the module must appear in the
-   manifest, or in `verify/libc-abi/allow.list` with a reason on the same line. A definition in
-   neither fails the check — otherwise a new item bypasses the gate without anyone noticing.
+4. **Coverage is enforced.** Every public type, struct, union, enum, static and const in either
+   module must appear in the manifest, or in `verify/libc-abi/allow.list` with a reason on the
+   same line. A definition in neither fails the check — otherwise a new item bypasses the gate
+   without anyone noticing.
 
 The Rust side builds with the pinned nightly, `-Zbuild-std=core`, and a test-only target JSON
 under `verify/testdata/` (`os: minixrs`, `families: ["unix"]`), so the gate does not depend on
@@ -198,8 +202,8 @@ the source, per `CLAUDE.md`'s "a new test that passes on its first run has not b
 
 ### Other tooling edits
 
-- `scripts/export-patches.sh` already has `rust` and `libc` arms; the `libc` base default is
-  `upstream/main` and becomes `0.2.185`.
+- `scripts/export-patches.sh` already has `rust` and `libc` arms. (The `libc` base default
+  moved from `upstream/main` to `0.2.185` in P4a; the `rust` default is already the pin.)
 - `docs/sysroot-layout.md` gains `rust/` and `share/minixrs/hello-rs`.
 - `README.md` and `CLAUDE.md` gain the new scripts and gates.
 

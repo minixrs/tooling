@@ -5,7 +5,9 @@
 #   include <header.h>           a C header the items below need
 #   int     NAME                 integer typedef: size, alignment, signedness
 #   type    NAME                 any other typedef: size, alignment
-#   struct  NAME [FIELD ...]     C `struct NAME`: size, alignment, field offsets
+#   struct  NAME [FIELD ...]     C `struct NAME`: size, alignment, and each
+#                                field's offset and size
+#   union   NAME [FIELD ...]     C `union NAME`: the same
 #   typedef NAME [FIELD ...]     C typedef'd aggregate `NAME`: the same
 #   const   NAME                 an integer constant's value
 #

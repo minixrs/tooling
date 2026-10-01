@@ -12,6 +12,8 @@
 
 **Every code block in this plan was run on 2026-09-30** against the installed SDK and a scratch copy of libc 0.2.185: the module compiles with zero warnings, the gate reports `209 entries identical`, and each mutation in Task 4 produced the output quoted there. If a step's output differs from what is written, stop and find out why — do not adjust the expectation.
 
+**After execution:** the final whole-branch review added each field's size to the table, so the gate now reports `309 entries identical`, not 209, and a mutation's entry numbers shift accordingly. It also widened coverage to unions, enums, statics and `src/new/minixrs/`. The counts below are the ones observed while the plan ran; they are history.
+
 ## Global Constraints
 
 - **Two repos, two sessions.** Tasks 1, 2 and 5 run in `~/src/tooling`. Tasks 3 and 4 edit `$MINIXRS_FORKS_DIR/libc-minixrs` and run **in a session inside that checkout** — never edit fork source from a tooling session (the cross-repo rule in `CLAUDE.md`).

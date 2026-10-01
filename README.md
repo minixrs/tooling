@@ -36,6 +36,7 @@ verify/check-brand.sh        PT_NOTE brand verifier — works today on any ELF
 verify/check-image.sh        the kernel loader's rules, checked on the host
 verify/selftest.sh           builds fixtures and exercises both verifiers
 verify/check-driver.sh       the M2 gate: does clang know the triple?
+verify/check-libc-abi.sh     the P4a gate: libc-minixrs vs the sysroot's C headers
 ```
 
 ## Fork checkouts

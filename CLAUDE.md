@@ -33,11 +33,13 @@ carries no status at all.
 gate over trusting a marker:
 
 ```sh
-verify/selftest.sh          # brand + image fixtures, needs no SDK — 14 fixtures
+verify/selftest.sh          # brand, image + ABI-comparer fixtures, needs no SDK — 18 fixtures
 verify/check-driver.sh      # the M2 gate: does clang know the triple?
+verify/check-libc-abi.sh    # the P4a gate: libc-minixrs matches the C headers
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
 ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
+ls patches/libc/*.patch     # 2 files (P4a)
 ```
 
 ## Workflow: superpowers
@@ -227,3 +229,15 @@ are the failure mode here: the scripts are mostly preconditions.
   alone still yields 64 KiB- (hence 4 KiB-) aligned segments. Without
   separate-loadable-segments lld packs segments so only `p_offset ≡ p_vaddr (mod page)`
   holds and *neither* is aligned.
+- **`od -tx8` pads differently on BSD and GNU.** macOS prints `30`, GNU prints
+  `0000000000000030`. `verify/libc-abi/compare.sh` strips leading zeros for
+  that reason; an expected string written against one will not match the other.
+- **A libc-minixrs definition needs a manifest line.** `verify/check-libc-abi.sh`
+  fails on any `pub type`/`struct`/`const` in `src/unix/minixrs/` that
+  `verify/libc-abi/items.list` does not name, and on any `#[cfg]` in the module.
+  musl hides some members behind `_GNU_SOURCE` and spells others as macros
+  (`st_atime` is `st_atim.tv_sec`; `sa_sigaction` is already a macro, so it
+  takes no `RUST=C` mapping).
+- **`git rev-parse <tag>` on an annotated tag names the tag object, not the
+  commit.** The P4a plan expected `096ede8` for libc's `0.2.185`; the checkout
+  is `71d5bfc`, the commit the tag points to. Compare against `<tag>^{commit}`.

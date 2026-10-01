@@ -66,7 +66,7 @@ The whole of it, in order. Detail for each lives in its phase section below.
 - [x] P3d: re-run `verify/check-driver.sh` and `verify/check-image.sh` over the
       rebuilt SDK's images and the minixrs repo's own images
 - [x] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
-- [ ] P4a: libc-minixrs — the fork, and `verify/check-libc-abi.sh` green
+- [x] P4a: libc-minixrs — the fork, and `verify/check-libc-abi.sh` green
 - [ ] P4b: rust-minixrs — target spec and std port; `./x build --stage 1
       library` succeeds for host and target
 - [ ] P4c / M5: `scripts/build-rust.sh` and `verify/check-rust.sh` — a bare

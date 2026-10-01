@@ -655,7 +655,7 @@ git switch -c minixrs/0.2.185
 git rev-parse HEAD
 ```
 
-Expected: `096ede817388a86fc2b58d6533e6e8809feaed53` (the `0.2.185` tag, verified against GitHub on 2026-09-30).
+Expected: `71d5bfcc1bda05da1783666fc2cd7d9669c9c4c8`, the commit tag `0.2.185` points to. (This plan first quoted `096ede8…`, the annotated tag *object*; the Task 3 session caught it — compare against `0.2.185^{commit}`.)
 
 - [ ] **Step 2: USER-GATED — create the GitHub fork**
 

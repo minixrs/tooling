@@ -1,0 +1,235 @@
+From b2422a14306bf1ca9cb0852eb6c33a7711ec91b0 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Thu, 1 Oct 2026 00:56:24 -0500
+Subject: [PATCH 2/2] minixrs: aarch64 definitions for musl-minixrs
+
+The 45 types, structs and constants src/unix/mod.rs needs from an OS
+module, copied from the Linux-musl-aarch64 definitions. Each is checked
+against the SDK sysroot's headers by the tooling repo's
+verify/check-libc-abi.sh.
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ src/unix/minixrs/mod.rs | 209 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 209 insertions(+)
+
+diff --git a/src/unix/minixrs/mod.rs b/src/unix/minixrs/mod.rs
+index 9e0010a2..0bb7097e 100644
+--- a/src/unix/minixrs/mod.rs
++++ b/src/unix/minixrs/mod.rs
+@@ -9,3 +9,212 @@
+ //! repo. Adding an item here without adding it to that manifest fails the gate.
+ 
+ use crate::prelude::*;
++
++pub type blkcnt_t = i64;
++pub type blksize_t = c_int;
++pub type cc_t = c_uchar;
++pub type clock_t = c_long;
++pub type dev_t = u64;
++pub type fsblkcnt_t = u64;
++pub type fsfilcnt_t = u64;
++pub type ino_t = u64;
++pub type mode_t = u32;
++pub type nfds_t = c_ulong;
++pub type nlink_t = u32;
++pub type off_t = i64;
++pub type pthread_key_t = c_uint;
++pub type pthread_t = *mut c_void;
++pub type rlim_t = c_ulonglong;
++pub type sa_family_t = u16;
++pub type socklen_t = u32;
++pub type speed_t = c_uint;
++pub type suseconds_t = i64;
++pub type tcflag_t = c_uint;
++pub type time_t = i64;
++pub type wchar_t = u32;
++
++pub const FD_SETSIZE: usize = 1024;
++pub const NCCS: usize = 32;
++
++s! {
++    pub struct sockaddr {
++        pub sa_family: sa_family_t,
++        pub sa_data: [c_char; 14],
++    }
++
++    pub struct addrinfo {
++        pub ai_flags: c_int,
++        pub ai_family: c_int,
++        pub ai_socktype: c_int,
++        pub ai_protocol: c_int,
++        pub ai_addrlen: socklen_t,
++        pub ai_addr: *mut sockaddr,
++        pub ai_canonname: *mut c_char,
++        pub ai_next: *mut addrinfo,
++    }
++
++    pub struct fd_set {
++        fds_bits: [c_ulong; FD_SETSIZE / 64],
++    }
++
++    pub struct tm {
++        pub tm_sec: c_int,
++        pub tm_min: c_int,
++        pub tm_hour: c_int,
++        pub tm_mday: c_int,
++        pub tm_mon: c_int,
++        pub tm_year: c_int,
++        pub tm_wday: c_int,
++        pub tm_yday: c_int,
++        pub tm_isdst: c_int,
++        pub tm_gmtoff: c_long,
++        pub tm_zone: *const c_char,
++    }
++
++    pub struct Dl_info {
++        pub dli_fname: *const c_char,
++        pub dli_fbase: *mut c_void,
++        pub dli_sname: *const c_char,
++        pub dli_saddr: *mut c_void,
++    }
++
++    pub struct lconv {
++        pub decimal_point: *mut c_char,
++        pub thousands_sep: *mut c_char,
++        pub grouping: *mut c_char,
++        pub int_curr_symbol: *mut c_char,
++        pub currency_symbol: *mut c_char,
++        pub mon_decimal_point: *mut c_char,
++        pub mon_thousands_sep: *mut c_char,
++        pub mon_grouping: *mut c_char,
++        pub positive_sign: *mut c_char,
++        pub negative_sign: *mut c_char,
++        pub int_frac_digits: c_char,
++        pub frac_digits: c_char,
++        pub p_cs_precedes: c_char,
++        pub p_sep_by_space: c_char,
++        pub n_cs_precedes: c_char,
++        pub n_sep_by_space: c_char,
++        pub p_sign_posn: c_char,
++        pub n_sign_posn: c_char,
++        pub int_p_cs_precedes: c_char,
++        pub int_p_sep_by_space: c_char,
++        pub int_n_cs_precedes: c_char,
++        pub int_n_sep_by_space: c_char,
++        pub int_p_sign_posn: c_char,
++        pub int_n_sign_posn: c_char,
++    }
++
++    pub struct passwd {
++        pub pw_name: *mut c_char,
++        pub pw_passwd: *mut c_char,
++        pub pw_uid: crate::uid_t,
++        pub pw_gid: crate::gid_t,
++        pub pw_gecos: *mut c_char,
++        pub pw_dir: *mut c_char,
++        pub pw_shell: *mut c_char,
++    }
++
++    pub struct dirent {
++        pub d_ino: ino_t,
++        pub d_off: off_t,
++        pub d_reclen: c_ushort,
++        pub d_type: c_uchar,
++        pub d_name: [c_char; 256],
++    }
++
++    pub struct stat {
++        pub st_dev: dev_t,
++        pub st_ino: ino_t,
++        pub st_mode: mode_t,
++        pub st_nlink: nlink_t,
++        pub st_uid: crate::uid_t,
++        pub st_gid: crate::gid_t,
++        pub st_rdev: dev_t,
++        __pad0: Padding<c_ulong>,
++        pub st_size: off_t,
++        pub st_blksize: blksize_t,
++        __pad1: Padding<c_int>,
++        pub st_blocks: blkcnt_t,
++        pub st_atime: time_t,
++        pub st_atime_nsec: c_long,
++        pub st_mtime: time_t,
++        pub st_mtime_nsec: c_long,
++        pub st_ctime: time_t,
++        pub st_ctime_nsec: c_long,
++        __unused: Padding<[c_uint; 2]>,
++    }
++
++    pub struct statvfs {
++        pub f_bsize: c_ulong,
++        pub f_frsize: c_ulong,
++        pub f_blocks: fsblkcnt_t,
++        pub f_bfree: fsblkcnt_t,
++        pub f_bavail: fsblkcnt_t,
++        pub f_files: fsfilcnt_t,
++        pub f_ffree: fsfilcnt_t,
++        pub f_favail: fsfilcnt_t,
++        pub f_fsid: c_ulong,
++        pub f_flag: c_ulong,
++        pub f_namemax: c_ulong,
++        __f_reserved: Padding<[c_int; 6]>,
++    }
++
++    pub struct termios {
++        pub c_iflag: tcflag_t,
++        pub c_oflag: tcflag_t,
++        pub c_cflag: tcflag_t,
++        pub c_lflag: tcflag_t,
++        pub c_line: cc_t,
++        pub c_cc: [cc_t; NCCS],
++        pub __c_ispeed: speed_t,
++        pub __c_ospeed: speed_t,
++    }
++
++    pub struct sigset_t {
++        __val: [c_ulong; 16],
++    }
++
++    // FIXME(1.0): This should not implement `PartialEq`
++    #[allow(unpredictable_function_pointer_comparisons)]
++    pub struct sigaction {
++        pub sa_sigaction: crate::sighandler_t,
++        pub sa_mask: sigset_t,
++        pub sa_flags: c_int,
++        pub sa_restorer: Option<extern "C" fn()>,
++    }
++
++    pub struct sem_t {
++        __val: [c_int; 8],
++    }
++
++    // musl declares each pthread object as a union of an int array and a
++    // pointer-width array; one u64 array has the same size and alignment.
++    pub struct pthread_attr_t {
++        __size: [u64; 7],
++    }
++
++    pub struct pthread_mutex_t {
++        __size: [u64; 5],
++    }
++
++    pub struct pthread_cond_t {
++        __size: [u64; 6],
++    }
++
++    pub struct pthread_rwlock_t {
++        __size: [u64; 7],
++    }
++
++    pub struct pthread_mutexattr_t {
++        __attr: c_uint,
++    }
++
++    pub struct pthread_condattr_t {
++        __attr: c_uint,
++    }
++
++    pub struct pthread_rwlockattr_t {
++        __attr: [c_uint; 2],
++    }
++}
+-- 
+2.55.0
+

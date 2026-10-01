@@ -236,9 +236,9 @@ are the failure mode here: the scripts are mostly preconditions.
   `0000000000000030`. `verify/libc-abi/compare.sh` strips leading zeros for
   that reason; an expected string written against one will not match the other.
 - **A libc-minixrs definition needs a manifest line.** `verify/check-libc-abi.sh`
-  fails on any public type, struct, union, enum, static or const in
-  `src/unix/minixrs/` or `src/new/minixrs/` that `verify/libc-abi/items.list`
-  (or `allow.list`) does not name, and on any `#[cfg]` or `#![cfg]` there. It
+  fails on any public type, struct, union, enum, static, const or `pub use`
+  re-export in `src/unix/minixrs/` or `src/new/minixrs/` that
+  `verify/libc-abi/items.list` (or `allow.list`) does not name, and on any `#[cfg]` or `#![cfg]` there. It
   compares each field's offset and width, but not a field's signedness.
   musl hides some members behind `_GNU_SOURCE` and spells others as macros
   (`st_atime` is `st_atim.tv_sec`; `sa_sigaction` is already a macro, so it

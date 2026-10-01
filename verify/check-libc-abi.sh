@@ -8,8 +8,8 @@
 # field offsets and constants into a .minixrs_abi section. The two sections
 # are compared byte for byte.
 #
-# It also enforces coverage: every public type, struct, union, enum, static and
-# const in libc-minixrs' minixrs modules (src/unix/minixrs/ and, when present,
+# It also enforces coverage: every public type, struct, union, enum, static,
+# const and re-exported (`pub use`) name in libc-minixrs' minixrs modules (src/unix/minixrs/ and, when present,
 # src/new/minixrs/) must be in items.list or in allow.list, and neither module
 # may carry #[cfg] or #![cfg]. Function declarations are not checked — a
 # signature has no layout to compare — and the PASS line says how many.
@@ -68,7 +68,39 @@ module_source() { find "${MODULE_DIRS[@]}" -name '*.rs' -exec cat {} +; }
 # and is dropped here, then counted with the other functions below.
 module_source |
     sed -nE 's/^[[:space:]]*(#\[[^]]*\][[:space:]]*)*pub[[:space:]]+(unsafe[[:space:]]+)?(type|struct|union|enum|static|const)[[:space:]]+(mut[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*).*/\5/p' |
-    grep -vx 'fn' | sort -u > "$work/defined" || true
+    grep -vx 'fn' > "$work/defined" || true
+# A `pub use` publishes a name as surely as a `pub const` does — src/new/
+# minixrs/unistd.rs consists of nothing else — so each re-exported name is a
+# module item too (its alias, for `X as Y`). A glob from outside the modules
+# cannot be enumerated, so it is refused; `self::…::*` is fine, because the
+# submodule it names is scanned directly.
+module_source | sed 's://.*$::' | tr '\n' ' ' |
+    { grep -oE 'pub[[:space:]]+use[[:space:]]+[^;]*;' || true; } |
+    awk '
+        function emit(item, whole,    seg, n) {
+            gsub(/^ +| +$/, "", item)
+            if (item == "") return
+            if (item ~ / as /) { sub(/.* as /, "", item); print item; return }
+            if (item ~ /\*$/) { if (whole !~ /^self::/) print "!glob " whole; return }
+            n = split(item, seg, "::"); print seg[n]
+        }
+        {
+            s = $0
+            sub(/^pub[ \t]+use[ \t]+/, "", s); sub(/;$/, "", s); gsub(/[ \t]+/, " ", s)
+            if (index(s, "{")) {
+                inner = s; sub(/^[^{]*\{/, "", inner); sub(/\}[^}]*$/, "", inner)
+                if (index(inner, "{")) { print "!nested " s; next }
+                n = split(inner, part, ",")
+                for (i = 1; i <= n; i++) emit(part[i], s)
+            } else emit(s, s)
+        }' > "$work/reexported"
+if grep -q '^!' "$work/reexported"; then
+    echo "check-libc-abi: a re-export whose names coverage cannot enumerate:" >&2
+    sed -n 's/^!/  /p' "$work/reexported" >&2
+    exit 1
+fi
+cat "$work/reexported" >> "$work/defined"
+sort -u -o "$work/defined" "$work/defined"
 listed | sort -u > "$work/listed"
 [ -s "$work/defined" ] || die "found no public definitions under $MODULE_DIR"
 # Coverage is by name, so one name must mean one definition. A #[cfg] in a

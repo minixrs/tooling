@@ -12,7 +12,7 @@
 
 **Every code block in this plan was run on 2026-09-30** against the installed SDK and a scratch copy of libc 0.2.185: the module compiles with zero warnings, the gate reports `209 entries identical`, and each mutation in Task 4 produced the output quoted there. If a step's output differs from what is written, stop and find out why — do not adjust the expectation.
 
-**After execution:** the final whole-branch review added each field's size to the table, so the gate now reports `309 entries identical`, not 209, and a mutation's entry numbers shift accordingly. It also widened coverage to unions, enums, statics and `src/new/minixrs/`. The counts below are the ones observed while the plan ran; they are history.
+**After execution:** the final whole-branch review added each field's size to the table, and PR review then counted `pub use` re-exports as module items and added `STD{IN,OUT,ERR}_FILENO` to the manifest, so the gate now reports `312 entries identical` and `48 module items`, not 209 and 45, and a mutation's entry numbers shift accordingly. Coverage also widened to unions, enums, statics, re-exports and `src/new/minixrs/`. The counts below are the ones observed while the plan ran; they are history.
 
 ## Global Constraints
 

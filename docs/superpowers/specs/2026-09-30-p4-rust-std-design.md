@@ -102,7 +102,7 @@ cannot finish until a libc-minixrs tag exists.
 3. Both objects are reduced to the raw bytes of that symbol with `llvm-objcopy` and compared. A
    mismatch reports the manifest line it corresponds to.
 4. **Coverage is enforced.** Every public type, struct, union, enum, static and const in either
-   module must appear in the manifest, or in `verify/libc-abi/allow.list` with a reason on the
+   module, and every name either module re-exports with `pub use`, must appear in the manifest, or in `verify/libc-abi/allow.list` with a reason on the
    same line. A definition in neither fails the check — otherwise a new item bypasses the gate
    without anyone noticing.
 

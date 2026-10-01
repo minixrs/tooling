@@ -34,6 +34,7 @@ include <sys/statvfs.h>
 include <sys/types.h>
 include <termios.h>
 include <time.h>
+include <unistd.h>
 include <wchar.h>
 
 int blkcnt_t
@@ -61,6 +62,10 @@ int wchar_t
 
 const FD_SETSIZE
 const NCCS
+# Re-exported by src/new/minixrs/unistd.rs from libc's common POSIX module.
+const STDIN_FILENO
+const STDOUT_FILENO
+const STDERR_FILENO
 
 struct sockaddr sa_family sa_data
 struct addrinfo ai_flags ai_family ai_socktype ai_protocol ai_addrlen ai_addr ai_canonname ai_next

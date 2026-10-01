@@ -62,6 +62,9 @@ apply here):
   inside that repo** (the cross-repo rule below). The plan is the hand-off.
 - **A plan is not authority.** Where a plan and its spec disagree, the spec
   wins and the plan gets corrected.
+- **A fork session executing a plan from here appends to this repo's ledger by
+  hand** (`.superpowers/sdd/<plan>/progress.md`), and skips USER-GATED steps,
+  recording them as awaiting the user.
 
 Review habits that carry over, each of which caught real defects in minixrs:
 
@@ -243,3 +246,14 @@ are the failure mode here: the scripts are mostly preconditions.
 - **`git rev-parse <tag>` on an annotated tag names the tag object, not the
   commit.** The P4a plan expected `096ede8` for libc's `0.2.185`; the checkout
   is `71d5bfc`, the commit the tag points to. Compare against `<tag>^{commit}`.
+- **The pinned nightly ships std's vendored crates:**
+  `~/.rustup/toolchains/nightly-2026-07-23-*/lib/rustlib/src/rust/library/vendor/`
+  (libc 0.2.185 among them). Prototype a fork change against a scratch copy of
+  that before planning it; no clone needed.
+- **clang searches `C_INCLUDE_PATH`/`CPATH` before `--sysroot`.** This machine
+  sets `C_INCLUDE_PATH=~/.wasmedge/include`, so any C-side check must run
+  clang under `env -u CPATH -u C_INCLUDE_PATH …`, or an ambient header
+  shadows musl's.
+- **To keep the caller's flags out of a cargo build, set
+  `CARGO_ENCODED_RUSTFLAGS=''`, don't unset it.** Set but empty outranks
+  `RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS` and any config.toml `rustflags`.

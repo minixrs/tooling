@@ -759,7 +759,7 @@ A new branch, so nothing is force-pushed. `minixrs/0.2.185` stays where it was.
 Stop and ask; it creates a public repository:
 
 ```bash
-gh repo fork rust-lang/rust --org minixrs --fork-name rust-minixrs --remote=false
+gh repo fork rust-lang/rust --org minixrs --fork-name rust-minixrs
 ```
 
 If declined for now, continue; nothing needs `origin` until Task 8, Step 7.

@@ -85,6 +85,11 @@ fi
 # LLVM_PARALLEL_LINK_JOBS caps concurrent links: Release+assertions link steps
 # are memory-hungry, and $JOBS of them at once is how you swap a 36 GiB
 # machine to death.
+#
+# LLVM_ENABLE_ZSTD=OFF: CMake otherwise enables zstd whenever it finds one —
+# Homebrew's, here — and clang, plus every rustc linked through llvm-config
+# (P4), then depends on a package nothing in this repo installs. zstd only
+# compresses debug sections. verify/check-driver.sh step 5 holds the line.
 cmake -G Ninja -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$MINIXRS_SDK" \
@@ -96,10 +101,16 @@ cmake -G Ninja -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" \
     -DLLVM_INCLUDE_EXAMPLES=OFF \
     -DLLVM_PARALLEL_LINK_JOBS="${LINK_JOBS:-4}" \
     -DCLANG_DEFAULT_LINKER=lld \
+    -DLLVM_ENABLE_ZSTD=OFF \
     ${CMAKE_EXTRA[@]+"${CMAKE_EXTRA[@]}"}
 
 ninja -C "$BUILD_DIR" -j "$JOBS"
 ninja -C "$BUILD_DIR" install
+
+# The name rustc's aarch64-unknown-minixrs target spec gives its linker (P4
+# design R2): invoked under it, clang targets minixrs with no --target, and a
+# missing SDK is "linker not found" rather than Apple's clang silently.
+ln -sf clang "$MINIXRS_SDK/bin/aarch64-unknown-minixrs-clang"
 
 echo "build-llvm: installed into $MINIXRS_SDK"
 

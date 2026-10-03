@@ -241,6 +241,7 @@ prerequisites, so none can be dropped silently.
 | `HashMap`'s default hasher | `/dev/urandom` in minixrs | Panics on first use |
 | SIGPIPE ignore; stack-overflow reporting | Signals (minixrs Phase 7) | Silently absent |
 | `thread::spawn`, `fs`, `process`, `net`, `time` | Their syscalls in musl-minixrs | Runtime `Err` carrying `ENOSYS` |
+| `thread::sleep` | `clock_nanosleep` in musl-minixrs | Panics: it returns `()`, so it has no `Err` to carry `ENOSYS`, and upstream asserts on any error other than `EINTR` — the same on every Unix arm, not a carve-out |
 | Delete minixrs's target JSON and `check-cfg` shims (R11) | A CI story for the fork toolchain | minixrs stays on `-Zbuild-std` |
 | Widening `src/unix/minixrs/` beyond std's needs | Demand from real crates | Crates using missing items fail to compile |
 

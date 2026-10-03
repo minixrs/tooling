@@ -20,7 +20,7 @@
 #   MINIXRS_LIBC_DIR   the libc-minixrs checkout
 #                      (default $MINIXRS_FORKS_DIR/libc-minixrs)
 #   MINIXRS_NIGHTLY    rustup toolchain for the Rust side
-#                      (default nightly-2026-07-23 — minixrs' pin; needs rust-src)
+#                      (default nightly-2026-10-01 — minixrs' pin; needs rust-src)
 #
 # The Rust side uses -Zbuild-std=core and verify/testdata's test-only target
 # JSON, so this gate does not need rust-minixrs to exist.
@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABI_DIR="$SCRIPT_DIR/libc-abi"
 TARGET_JSON="$SCRIPT_DIR/testdata/aarch64-unknown-minixrs-unix.json"
 LIBC_DIR="${MINIXRS_LIBC_DIR:-$MINIXRS_FORKS_DIR/libc-minixrs}"
-NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-07-23}"
+NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-10-01}"
 MODULE_DIR="$LIBC_DIR/src/unix/minixrs"
 # Every directory whose definitions reach the crate root as minixrs's own.
 # src/new/minixrs/ is upstream libc's preferred home for new definitions, so
@@ -64,11 +64,13 @@ listed() {
 }
 module_source() { find "${MODULE_DIRS[@]}" -name '*.rs' -exec cat {} +; }
 # Attributes may share the item's line (`#[doc(hidden)] pub type …`). A
-# `pub const fn` is a function, not a constant: it extracts as the name "fn"
-# and is dropped here, then counted with the other functions below.
+# `pub const fn` — or `const safe fn`, or `const unsafe extern "C" fn` — is a
+# function, not a constant: it is filtered out here, then counted with the
+# other functions below.
 module_source |
-    sed -nE 's/^[[:space:]]*(#\[[^]]*\][[:space:]]*)*pub[[:space:]]+(unsafe[[:space:]]+)?(type|struct|union|enum|static|const)[[:space:]]+(mut[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*).*/\5/p' |
-    grep -vx 'fn' > "$work/defined" || true
+    grep -vE '^[[:space:]]*(#\[[^]]*\][[:space:]]*)*pub[[:space:]]+const[[:space:]]+((safe|unsafe)[[:space:]]+)?(extern[[:space:]]+"[^"]*"[[:space:]]+)?fn[[:space:]]' |
+    sed -nE 's/^[[:space:]]*(#\[[^]]*\][[:space:]]*)*pub[[:space:]]+(unsafe[[:space:]]+)?(type|struct|union|enum|static|const)[[:space:]]+(mut[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*).*/\5/p' \
+    > "$work/defined" || true
 # A `pub use` publishes a name as surely as a `pub const` does — src/new/
 # minixrs/unistd.rs consists of nothing else — so each re-exported name is a
 # module item too (its alias, for `X as Y`). A glob from outside the modules

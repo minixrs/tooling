@@ -1,3 +1,6 @@
 # Items in libc-minixrs' src/unix/minixrs/ that verify/check-libc-abi.sh does
 # NOT compare against the C headers. One per line: NAME, then the reason.
 # An item in neither this file nor items.list fails the gate.
+Ioctl                       ioctl()'s request type; C has no typedef for it (musl declares `int`)
+PTHREAD_MUTEX_INITIALIZER   an aggregate constant; the gate compares integer constants only
+PTHREAD_COND_INITIALIZER    an aggregate constant; the gate compares integer constants only

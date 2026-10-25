@@ -39,6 +39,9 @@ verify/check-driver.sh      # the M2 gate, plus the triple-named driver and a
 verify/check-libc-abi.sh    # the P4a gate: libc-minixrs matches the C headers
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
+scripts/build-rust.sh       # installs the stage-1 toolchain and links +minixrs
+verify/check-rust.sh        # the M5 gate — installs hello-rs; passes with the
+                            # forks volume unmounted
 ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
 ls patches/libc/*.patch     # 3 files (P4a, P4b)
 ls patches/rust/*.patch     # 7 files (P4b)
@@ -271,7 +274,22 @@ are the failure mode here: the scripts are mostly preconditions.
   leaves `RUSTFLAGS` set. Run any rust or cross build under
   `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables.
   Nothing in P4b was affected (hello relinked byte-identical with both unset);
-  P4c's `build-rust.sh` owes the `env -u`.
+  `build-rust.sh` unsets them for bootstrap, and `check-rust.sh` builds under
+  `env -i`.
+- **rustup's fallback cargo for a linked toolchain is the `nightly` toolchain's,
+  whatever version that is** (1.97 here), so a machine whose `nightly` is not the
+  pin runs a version-skewed cargo. `build-rust.sh` installs the pin's cargo,
+  whose commit G7 compares to the fork's `src/tools/cargo` gitlink.
+- **`~/.cargo/config.toml` is in scope for every cargo build**, cwd
+  notwithstanding, and this machine has one. An isolated build needs a fresh
+  `CARGO_HOME`.
+- **`forks-volume.sh unmount` can be refused "Resource busy"** by a VM
+  (`com.apple.Virtualization.VirtualMachine.xpc`) holding a file open. Never force
+  it; prove the unmounted path with `sandbox-exec -p '(version 1)(allow default)
+  (deny file-read* file-write* (subpath "<forks dir>"))' <script>` instead.
+- **`build-rust.sh` over an existing build dir is incremental**: 2m09s for P4b's
+  tree after `rustc_target` and `library/Cargo.toml` changed, 0.13 s as a no-op.
+  A cold build is much longer; don't mistake the quick rerun for a skipped build.
 - **To keep the caller's flags out of a cargo build, set
   `CARGO_ENCODED_RUSTFLAGS=''`, don't unset it.** Set but empty outranks
   `RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS` and any config.toml `rustflags`.

@@ -70,7 +70,7 @@ The whole of it, in order. Detail for each lives in its phase section below.
 - [x] P4a: libc-minixrs — the fork, and `verify/check-libc-abi.sh` green
 - [x] P4b: rust-minixrs — target spec and std port; `./x build --stage 1
       library` succeeds for host and target
-- [ ] P4c / M5: `scripts/build-rust.sh` and `verify/check-rust.sh` — a bare
+- [x] P4c / M5: `scripts/build-rust.sh` and `verify/check-rust.sh` — a bare
       `cargo +minixrs build --target aarch64-unknown-minixrs` links a branded
       hello, installed at `$MINIXRS_SDK/share/minixrs/hello-rs`
 

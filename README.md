@@ -29,6 +29,7 @@ scripts/build-llvm.sh        clang+lld from the llvm-minixrs fork → $MINIXRS_S
 scripts/build-compiler-rt.sh builtins for aarch64-unknown-minixrs
 scripts/build-musl.sh        SDK-flavor musl build → $MINIXRS_SDK/sysroot
 scripts/build-sysroot.sh     sysroot assembly + ABI selftest + brand check
+scripts/build-rust.sh        stage-1 rust-minixrs → $MINIXRS_SDK/rust, linked as +minixrs
 scripts/export-patches.sh    git format-patch from the forks → patches/
 cmake/minixrs.cmake          CMake toolchain file for C consumers
 patches/{llvm,musl,rust,libc}/  exported patch series (rebase-maintained forks)
@@ -37,6 +38,7 @@ verify/check-image.sh        the kernel loader's rules, checked on the host
 verify/selftest.sh           builds fixtures and exercises both verifiers
 verify/check-driver.sh       the M2 gate, plus the triple-named driver and a self-contained SDK
 verify/check-libc-abi.sh     the P4a gate: libc-minixrs vs the sysroot's C headers
+verify/check-rust.sh         the M5 gate: a bare cargo build links a branded hello
 ```
 
 ## Fork checkouts
@@ -110,6 +112,18 @@ verify/check-driver.sh                    # 0 = clang knows the triple, the trip
 
 Against an unpatched (`--baseline`) clang it correctly fails at step 1 with
 `__minixrs__ not defined`.
+
+With the rust-minixrs fork built, the M5 gate is two commands:
+
+```sh
+scripts/build-rust.sh                     # stage-1 rustc + std, installed at $MINIXRS_SDK/rust and linked as rustup's +minixrs
+verify/check-rust.sh                      # 0 = a bare `cargo +minixrs build --target aarch64-unknown-minixrs` links a branded, loadable hello
+```
+
+The gate builds under `env -i` with a fresh `CARGO_HOME`, so it proves the SDK
+and rustup are enough, and it installs the hello at
+`$MINIXRS_SDK/share/minixrs/hello-rs`. It passes with the forks volume
+unmounted; only `build-rust.sh` needs the volume.
 
 ## Roadmap
 

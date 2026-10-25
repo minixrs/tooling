@@ -12,7 +12,7 @@ $MINIXRS_SDK/
 │   ├── llvm-ar, llvm-nm, llvm-objcopy, llvm-objdump,
 │   │   llvm-ranlib, llvm-readelf, llvm-readobj, …   (LLVM_INSTALL_UTILS=ON)
 │   ├── llvm-config                        used by rust-minixrs bootstrap (P4)
-│   └── aarch64-unknown-minixrs-clang        → clang; the linker rustc's target spec names (P4)
+│   └── aarch64-unknown-minixrs-clang      → clang; the linker rustc's target spec names (P4)
 ├── lib/
 │   ├── clang/
 │   │   └── 22/                            clang resource dir

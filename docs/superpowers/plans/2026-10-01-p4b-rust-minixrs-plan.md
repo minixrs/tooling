@@ -1054,7 +1054,7 @@ by the minixrs tooling repo."
 - Consumes: Task 5's target, Task 6's libc.
 - Produces: the P4b gate — `./x build --stage 1 library` green for both targets.
 
-**The decisions.** The rule: **minixrs takes the arm linux-musl takes** where that arm is a POSIX or musl path with different behavior. It does not take glibc's `*64` aliases or Hurd-only items. Where the kernel lacks a call, std calls musl, musl answers `ENOSYS`, and std returns `Err` (R5). This covers every `"hurd"` site at the pin (35 files, 111 hits) and every `target_env = "musl"` arm. 32 of the hits are doc-test attributes in `os/hurd/fs.rs`, which `os/minixrs/fs.rs` retargets.
+**The decisions.** The rule: **minixrs takes the arm linux-musl takes** where that arm is a POSIX or musl path with different behavior. It does not take glibc's `*64` aliases or Hurd-only items. Where the kernel lacks a call, std calls musl, musl answers `ENOSYS`, and std returns `Err` (R5). This covers every `"hurd"` site at the pin (29 files, 101 hits: `git -C ~/src/minixrs-forks/rust-minixrs grep -n '"hurd"' 21b707e3f -- library/`, which excludes the backtrace submodule) and every `target_env = "musl"` arm. 32 of the hits are doc-test attributes in `os/hurd/fs.rs`, which `os/minixrs/fs.rs` retargets.
 
 | Site | minixrs | Why |
 |---|---|---|

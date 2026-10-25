@@ -114,7 +114,7 @@ its status. Full plan: [plans/minixrs-m1.md](plans/minixrs-m1.md). Summary:
 
 - `tools/targets/aarch64-unknown-minixrs.json` mirrors the pinned nightly's
   `aarch64-unknown-none` spec, changing only `"os": "minixrs"`; `llvm-target`
-  stays `aarch64-unknown-none` until the fork rustc exists (P4).
+  stays `aarch64-unknown-none` until minixrs builds with the fork rustc (spec R11).
 - The **kernel stays** on `aarch64-unknown-none` (truthfully bare-metal); only
   the 9 user binaries move.
 - Per-crate 3-line `build.rs` emits `-Tuser.ld` (cfg-gated), letting

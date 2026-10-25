@@ -35,7 +35,7 @@ patches/{llvm,musl,rust,libc}/  exported patch series (rebase-maintained forks)
 verify/check-brand.sh        PT_NOTE brand verifier — works today on any ELF
 verify/check-image.sh        the kernel loader's rules, checked on the host
 verify/selftest.sh           builds fixtures and exercises both verifiers
-verify/check-driver.sh       the M2 gate: does clang know the triple?
+verify/check-driver.sh       the M2 gate, plus the triple-named driver and a self-contained SDK
 verify/check-libc-abi.sh     the P4a gate: libc-minixrs vs the sysroot's C headers
 ```
 
@@ -105,7 +105,7 @@ corresponding fork exists (see the roadmap for sequencing), and point at
 Once `scripts/build-llvm.sh` has installed a clang, the M2 gate is:
 
 ```sh
-verify/check-driver.sh                    # 0 = clang knows the triple
+verify/check-driver.sh                    # 0 = clang knows the triple, the triple-named driver exists, and the SDK is self-contained
 ```
 
 Against an unpatched (`--baseline`) clang it correctly fails at step 1 with

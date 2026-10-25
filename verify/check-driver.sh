@@ -142,10 +142,11 @@ else
 fi
 LLVM_CONFIG="$(dirname "$CLANG")/llvm-config"
 syslibs="$("$LLVM_CONFIG" --system-libs 2>/dev/null)" || syslibs="?"
+# env -u LIBRARY_PATH: cc adds it as -L, so a shell that reaches a zstd would false-green a -lzstd.
 # shellcheck disable=SC2086 # the list is meant to split into -l flags
 if [ "$syslibs" != "?" ] &&
     printf 'int main(void) { return 0; }\n' |
-        /usr/bin/cc -x c - -o "$tmp/syslibs" $syslibs 2>"$tmp/syslibs.err"; then
+        env -u LIBRARY_PATH /usr/bin/cc -x c - -o "$tmp/syslibs" $syslibs 2>"$tmp/syslibs.err"; then
     pass "llvm-config's system libraries ($syslibs) link from the OS"
 else
     sed 's/^/check-driver:   /' "$tmp/syslibs.err" >&2 2>/dev/null || true

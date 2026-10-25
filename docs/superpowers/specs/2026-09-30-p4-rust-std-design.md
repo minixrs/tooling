@@ -170,8 +170,8 @@ an explicit OS list; minixrs is not on it and gets the no-op. The edits:
 | `sys/{args,env_consts,fd,fs,paths,pipe,thread,net}`, `os/unix` | minixrs takes the arm linux-musl takes where Hurd's arm is a POSIX or musl path; not glibc's `*64` aliases or Hurd-only items. The P4b plan decides every site | R6, compile; R4 |
 | `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.189-N" }`; `Cargo.lock` regenerated | R12 |
 
-The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (35 files, 111 hits at the
-pin, 32 of them doc-test attributes in `os/hurd/fs.rs`) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
+The plan enumerates the exact sites from `git -C ~/src/minixrs-forks/rust-minixrs grep -n '"hurd"' 21b707e3f -- library/` (29 files, 101 hits at the
+pin, excluding the backtrace submodule; 32 of them doc-test attributes in `os/hurd/fs.rs`) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
 prompt to look, not a rule to copy. The compiler side also needs the target registered with
 bootstrap's sanity check, since the stage-0 compiler does not know the triple, and a display name
 in rustdoc's exhaustive match on `Os`.
@@ -194,6 +194,8 @@ merge-base with its branch is the pinned commit. Then:
 2. `./x build --stage 1 library`.
 3. Install the stage-1 toolchain to `$MINIXRS_SDK/rust/` (R9).
 4. `rustup toolchain link minixrs "$MINIXRS_SDK/rust"`.
+
+Bootstrap runs under `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables: the SDK clang adds `LIBRARY_PATH` as a `-L` to every link, because upstream clang treats aarch64-darwin → aarch64-minixrs as not cross-compiling (`ToolChain::isCrossCompiling` compares only the arch).
 
 A stamp records the fork SHA, the libc-minixrs tag, and the clang version string, so a rebuild of
 any of the three invalidates it — the same reasoning as `build-musl.sh`'s stamp.

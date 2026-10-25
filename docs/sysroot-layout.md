@@ -2,7 +2,9 @@
 
 One prefix holds the whole SDK. Default `~/toolchains/minixrs`; every script
 sources `scripts/env.sh`, and consumers (minixrs CI, the cmake toolchain
-file, future rustc builds) read the `MINIXRS_SDK` environment variable.
+file) read the `MINIXRS_SDK` environment variable. `build-rust.sh` reads it to
+install the Rust toolchain; the installed toolchain does not, and needs
+`$MINIXRS_SDK/bin` on `PATH` to find its linker.
 
 ```
 $MINIXRS_SDK/
@@ -20,6 +22,11 @@ $MINIXRS_SDK/
 │   │           └── aarch64-unknown-minixrs/
 │   │               └── libclang_rt.builtins.a     build-compiler-rt.sh (M2)
 │   └── cmake/llvm/                        for compiler-rt & rustc configure
+├── rust/                                  installed by build-rust.sh (P4c);
+│   │                                      rustup toolchain +minixrs
+│   ├── bin/rustc, bin/cargo               cargo: the pinned nightly's
+│   └── .stamp                             "rust=<sha> libc=<tag>#<sha>
+│                                          clang=<version line>"
 ├── sysroot/                               installed by build-musl.sh (M3)
 │   ├── .stamp                             "musl=<sha> minixrs=<sha>
 │   │                                      clang=<version line>" — freshness
@@ -40,10 +47,13 @@ $MINIXRS_SDK/
 │           └── crtn.o
 └── share/
     └── minixrs/
-        └── hello                          branded static hello world ELF,
-                                           installed by build-sysroot.sh —
-                                           canned exec-test artifact for
-                                           minixrs sessions (M3 gate)
+        ├── hello                          branded static hello world ELF,
+        │                                  installed by build-sysroot.sh —
+        │                                  canned exec-test artifact for
+        │                                  minixrs sessions (M3 gate)
+        └── hello-rs                       branded std hello, installed by
+                                           verify/check-rust.sh (M5 gate);
+                                           aborts if booted until M4
 ```
 
 ## Contract points
@@ -85,5 +95,9 @@ $MINIXRS_SDK/
   a hello world from a bare driver line and runs both `check-brand.sh` and
   `check-image.sh` on it; a failure of either means nothing is installed to
   `share/minixrs/hello`.
+- **The Rust toolchain needs `$MINIXRS_SDK/bin` on `PATH`.** rustc finds its
+  linker, `aarch64-unknown-minixrs-clang`, by name (R2). The toolchain carries
+  no `rust-src`, and it works with the forks volume unmounted (R9): only
+  `build-rust.sh` needs the volume.
 - Nothing in minixrs may hard-code this path; only `$MINIXRS_SDK` (with the
   `~/toolchains/minixrs` default) is contractual.

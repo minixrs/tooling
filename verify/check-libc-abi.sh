@@ -20,7 +20,7 @@
 #   MINIXRS_LIBC_DIR   the libc-minixrs checkout
 #                      (default $MINIXRS_FORKS_DIR/libc-minixrs)
 #   MINIXRS_NIGHTLY    rustup toolchain for the Rust side
-#                      (default nightly-2026-10-01 — minixrs' pin; needs rust-src)
+#                      (default: env.sh's — minixrs' pin; needs rust-src)
 #
 # The Rust side uses -Zbuild-std=core and verify/testdata's test-only target
 # JSON, so this gate does not need rust-minixrs to exist.
@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABI_DIR="$SCRIPT_DIR/libc-abi"
 TARGET_JSON="$SCRIPT_DIR/testdata/aarch64-unknown-minixrs-unix.json"
 LIBC_DIR="${MINIXRS_LIBC_DIR:-$MINIXRS_FORKS_DIR/libc-minixrs}"
-NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-10-01}"
+NIGHTLY="$MINIXRS_NIGHTLY"
 MODULE_DIR="$LIBC_DIR/src/unix/minixrs"
 # Every directory whose definitions reach the crate root as minixrs's own.
 # src/new/minixrs/ is upstream libc's preferred home for new definitions, so

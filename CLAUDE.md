@@ -39,6 +39,9 @@ verify/check-driver.sh      # the M2 gate, plus the triple-named driver and a
 verify/check-libc-abi.sh    # the P4a gate: libc-minixrs matches the C headers
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
+scripts/build-rust.sh       # installs the stage-1 toolchain and links +minixrs
+verify/check-rust.sh        # the M5 gate — installs hello-rs; passes with the
+                            # forks volume unmounted
 ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
 ls patches/libc/*.patch     # 3 files (P4a, P4b)
 ls patches/rust/*.patch     # 7 files (P4b)
@@ -142,7 +145,7 @@ Mount the forks volume first — every fork-consuming script fails fast without 
   [OUTDIR]` (package `minixrs-gen-c-headers`) emits `include/minixrs/*.h` plus the
   `abi-selftest.c` that `build-sysroot.sh` compiles under `-nostdinc`.
 
-### Cross-building runtimes (compiler-rt today; musl and rust next)
+### Cross-building runtimes with CMake (compiler-rt)
 
 CMake defaults to the host and says nothing. All four traps below were hit on
 `build-compiler-rt.sh`'s first real run:
@@ -224,6 +227,12 @@ are the failure mode here: the scripts are mostly preconditions.
   consumed reports a false green. The same holds for a new assertion in a gate
   script: add it *before* the fix is installed, so the failing run is free proof
   that it is load bearing.
+- **Mutation-prove a gate without editing a fork** by breaking what the gate
+  builds, not the toolchain: a `build.rs` emitting
+  `cargo:rustc-link-arg=-nostartfiles` drops the brand, and
+  `-Wl,--unresolved-symbols=ignore-all` leaves an undefined global. Steps that
+  read only the compiler (cfg, target features) can't be mutated this way;
+  test them against a foreign toolchain, or from the clang side.
 - **A grep hit is not the consumer.** `imageBase` appears in `lld/ELF/Writer.cpp`
   as a *diagnostic* threshold and in `LinkerScript.cpp` as the actual layout base;
   citing the first as the second put three wrong claims into a plan doc. Trace
@@ -235,6 +244,9 @@ are the failure mode here: the scripts are mostly preconditions.
 - **The Bash tool's shell is zsh.** `${PIPESTATUS[0]}` and `read -ra` fail or expand
   to nothing *silently*; a probe loop using them reported four identical results that
   were all the no-flags case. Wrap multi-step shell probes in `bash -c`.
+- **The Bash tool refuses `rm` inside a `bash -c` string** (a safety check it
+  cannot see into). Run removals as plain commands, or make a fresh directory
+  rather than clearing an old one.
 - **Bash arithmetic has no `_` digit separators.** Mirroring a minixrs constant like
   `0x0020_0000` into shell must drop them, or `$(( ))` parses `_0000` as a variable
   name (see `verify/check-image.sh`).
@@ -271,7 +283,23 @@ are the failure mode here: the scripts are mostly preconditions.
   leaves `RUSTFLAGS` set. Run any rust or cross build under
   `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables.
   Nothing in P4b was affected (hello relinked byte-identical with both unset);
-  P4c's `build-rust.sh` owes the `env -u`.
+  `build-rust.sh` unsets them for bootstrap (unset, not empty — bootstrap passes
+  its own flags through `RUSTFLAGS`), and `check-rust.sh` builds under
+  `env -i`.
+- **rustup's fallback cargo for a linked toolchain is the `nightly` toolchain's,
+  whatever version that is** (cargo 1.97 on 2026-10-25), so a machine whose `nightly` is not the
+  pin runs a version-skewed cargo. `build-rust.sh` installs the pin's cargo,
+  whose commit G7 compares to the fork's `src/tools/cargo` gitlink.
+- **`~/.cargo/config.toml` is in scope for every cargo build**, cwd
+  notwithstanding, and this machine has one. An isolated build needs a fresh
+  `CARGO_HOME`.
+- **`forks-volume.sh unmount` can be refused "Resource busy"** by a VM
+  (`com.apple.Virtualization.VirtualMachine.xpc`) holding a file open. Never force
+  it; prove the unmounted path with `sandbox-exec -p '(version 1)(allow default)
+  (deny file-read* file-write* (subpath "<forks dir>"))' <script>` instead.
+- **`build-rust.sh` over an existing build dir is incremental**: 2m09s for P4b's
+  tree after `rustc_target` and `library/Cargo.toml` changed, 0.13 s as a no-op.
+  A cold build is much longer; don't mistake the quick rerun for a skipped build.
 - **To keep the caller's flags out of a cargo build, set
   `CARGO_ENCODED_RUSTFLAGS=''`, don't unset it.** Set but empty outranks
   `RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS` and any config.toml `rustflags`.

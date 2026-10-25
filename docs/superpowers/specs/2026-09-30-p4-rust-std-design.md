@@ -192,7 +192,11 @@ merge-base with its branch is the pinned commit. Then:
    (R8), targets `aarch64-apple-darwin,aarch64-unknown-minixrs`, build dir under
    `$MINIXRS_FORKS_DIR/build/`.
 2. `./x build --stage 1 library`.
-3. Install the stage-1 toolchain to `$MINIXRS_SDK/rust/` (R9).
+3. Install the stage-1 toolchain to `$MINIXRS_SDK/rust/` (R9), and beside it, as
+   `rust/bin/cargo`, the pinned nightly's own `cargo`. Bootstrap's stage 1 builds no cargo, and
+   rustup's fallback for a linked toolchain is whatever `nightly` the machine has (cargo 1.97 on
+   2026-10-25, four releases behind the pin). The pinned nightly's cargo is built from the same
+   `src/tools/cargo` commit as the fork (`f3865b2a4`); a guard compares the two.
 4. `rustup toolchain link minixrs "$MINIXRS_SDK/rust"`.
 
 Bootstrap runs under `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables: the SDK clang adds `LIBRARY_PATH` as a `-L` to every link, because upstream clang treats aarch64-darwin → aarch64-minixrs as not cross-compiling (`ToolChain::isCrossCompiling` compares only the arch).
@@ -204,12 +208,15 @@ any of the three invalidates it — the same reasoning as `build-musl.sh`'s stam
 
 In order; any failure stops the script and nothing is installed:
 
-1. `rustc +minixrs --print cfg --target aarch64-unknown-minixrs` shows `target_os="minixrs"`,
+1. `rustc +minixrs --print sysroot` is `$MINIXRS_SDK/rust` (R9), and
+   `rustc +minixrs --print cfg --target aarch64-unknown-minixrs` shows `target_os="minixrs"`,
    `target_env=""`, `target_family="unix"`, `panic="abort"`, `target_feature="crt-static"`.
 2. rustc's target feature set equals the one `clang -###` reports for the triple.
 3. A fresh `cargo new` hello builds with a bare
    `cargo +minixrs build --target aarch64-unknown-minixrs`, run with `RUSTFLAGS` and
-   `CARGO_ENCODED_RUSTFLAGS` unset and no `.cargo/config.toml` in scope.
+   `CARGO_ENCODED_RUSTFLAGS` unset and no `.cargo/config.toml` in scope — `$CARGO_HOME/config.toml`
+   counts, so `CARGO_HOME` is a fresh directory. `cargo +minixrs` resolves to `rust/bin/cargo`,
+   not a fallback.
 4. The output is `ET_EXEC`, has no undefined global symbols, and defines no `_Unwind_*` symbol
    but the null unwinder's four. (musl leaves `_DYNAMIC` a local hidden undefined, as in the C
    hello; std's `__cxa_thread_atexit_impl` is weak.)
@@ -254,7 +261,7 @@ prerequisites, so none can be dropped silently.
 | rustc rejects the external LLVM (upstream 22.1.8 lacks rust-lang's LLVM patches) | P4b cannot build | R10's fallback: apply `patches/llvm/` to the fork's `src/llvm-project` and build it in-tree |
 | The SDK LLVM lacks a component rustc links | Link failure late in the rustc build | `build-rust.sh` checks `llvm-config --components` against rustc's list before building; a fix is a `build-llvm.sh` flag, not a redesign |
 | `hello-rs` passes every host check and is still wrong at runtime | Found only at M4 | Accepted under R1. The host checks prove brand, layout, and link closure, not behavior |
-| A linked toolchain has no `cargo` | `cargo +minixrs` fails | rustup falls back to another installed toolchain's cargo for custom toolchains; `check-rust.sh` step 3 proves it rather than assuming |
+| A linked toolchain has no `cargo` | `cargo +minixrs` fails, or runs a version-skewed cargo | rustup's fallback is the `nightly` toolchain's cargo, whatever version that is, so `build-rust.sh` installs the pinned nightly's own; `check-rust.sh` step 3 proves `cargo +minixrs` resolves to it |
 | The parity manifest and the module drift | Unchecked definitions | The coverage rule in the parity gate |
 | The build outgrows the forks volume | `ENOSPC` | 138 GiB free on 2026-09-29; the existing risk-register mitigation (move the bundle) applies |
 

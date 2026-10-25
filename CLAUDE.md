@@ -34,12 +34,14 @@ gate over trusting a marker:
 
 ```sh
 verify/selftest.sh          # brand, image + ABI-comparer fixtures, needs no SDK — 18 fixtures
-verify/check-driver.sh      # the M2 gate: does clang know the triple?
+verify/check-driver.sh      # the M2 gate, plus the triple-named driver and a
+                            # self-contained SDK
 verify/check-libc-abi.sh    # the P4a gate: libc-minixrs matches the C headers
 scripts/build-sysroot.sh --skip-musl   # the P3 gate — installs the branded
                             # hello at $MINIXRS_SDK/share/minixrs/hello
 ls patches/llvm/*.patch     # 5 files (0001-0005 M2; 0006 the image base, dropped P3d)
-ls patches/libc/*.patch     # 2 files (P4a)
+ls patches/libc/*.patch     # 3 files (P4a, P4b)
+ls patches/rust/*.patch     # 7 files (P4b)
 ```
 
 ## Workflow: superpowers
@@ -247,13 +249,29 @@ are the failure mode here: the scripts are mostly preconditions.
   commit.** The P4a plan expected `096ede8` for libc's `0.2.185`; the checkout
   is `71d5bfc`, the commit the tag points to. Compare against `<tag>^{commit}`.
 - **The pinned nightly ships std's vendored crates:**
-  `~/.rustup/toolchains/nightly-2026-07-23-*/lib/rustlib/src/rust/library/vendor/`
-  (libc 0.2.185 among them). Prototype a fork change against a scratch copy of
+  `~/.rustup/toolchains/nightly-2026-10-01-*/lib/rustlib/src/rust/library/vendor/`
+  (libc 0.2.189 among them). Prototype a fork change against a scratch copy of
   that before planning it; no clone needed.
 - **clang searches `C_INCLUDE_PATH`/`CPATH` before `--sysroot`.** This machine
   sets `C_INCLUDE_PATH=~/.wasmedge/include`, so any C-side check must run
   clang under `env -u CPATH -u C_INCLUDE_PATH …`, or an ambient header
   shadows musl's.
+- **The link side leaks the same way.** This shell also sets
+  `LIBRARY_PATH=~/.wasmedge/lib`, and the SDK clang adds it as a `-L` to every
+  link, minixrs cross links included; the P4b plan's `./x` command form also
+  leaves `RUSTFLAGS` set. Run any rust or cross build under
+  `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables.
+  Nothing in P4b was affected (hello relinked byte-identical with both unset);
+  P4c's `build-rust.sh` owes the `env -u`.
 - **To keep the caller's flags out of a cargo build, set
   `CARGO_ENCODED_RUSTFLAGS=''`, don't unset it.** Set but empty outranks
   `RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS` and any config.toml `rustflags`.
+- **build-std treats std's path dependencies like registry crates.** Editing a
+  `[patch]`ed path crate does not rebuild it, so a prototype round against an
+  edited copy runs the previous round's code. `rm -rf target` between rounds.
+- **CMake enables optional dependencies it happens to find.** The SDK's LLVM
+  picked up Homebrew's zstd, so `llvm-config` said `-lzstd` and rustc_driver,
+  linked through it (P4 design R10), failed to link. `build-llvm.sh` sets
+  `LLVM_ENABLE_ZSTD=OFF`, and `check-driver.sh`'s self-contained step fails on
+  any non-OS library clang loads. Turn a new optional dependency off unless
+  something here installs it.

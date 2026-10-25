@@ -9,7 +9,7 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 
 1. Rust `std` PAL sits on **musl libc** (std → libc crate → musl), the classic
    Unix route. The PAL is downstream of the C toolchain + musl sysroot.
-2. Forks are **separate repos** (`llvm-minixrs`, `musl-minixrs`, later
+2. Forks are **separate repos** (`llvm-minixrs`, `musl-minixrs`,
    `rust-minixrs`, `libc-minixrs`) under the `minixrs` GitHub org, checked
    out together in `$MINIXRS_FORKS_DIR` — a case-sensitive APFS volume, not
    a sibling directory of this repo (see the risk register). This repo holds
@@ -21,9 +21,10 @@ the [identity note](abi-note.md) and the kernel enforcing it.
 
 **Pinned environment**
 
-- minixrs pins `nightly-2026-07-23` (rustc 1.99.0-nightly, commit `6f72b5dd5`,
-  **LLVM 22.1.8**) with `rust-src` + `llvm-tools` — so the LLVM fork targets
-  `release/22.x` and the same patch series later serves rustc.
+- minixrs pins `nightly-2026-10-01` (rustc 1.101.0-nightly, commit `21b707e3f`,
+  LLVM 23.1.1) with `rust-src` + `llvm-tools`. The SDK's LLVM stays at
+  **22.1.8**, which that rustc accepts as an external LLVM (≥ 21); see the P4
+  design's [The pin](superpowers/specs/2026-09-30-p4-rust-std-design.md#the-pin).
 - minixrs phase 5 (musl + FS) is complete, exec-from-FS (slice 5.9) included.
   Slice 5.6 shipped 2026-07-26 (minixrs PR #47), so **the ABI freeze is in
   effect**: `Message` layout, call numbers, endpoints and errnos now change
@@ -67,7 +68,7 @@ The whole of it, in order. Detail for each lives in its phase section below.
       rebuilt SDK's images and the minixrs repo's own images
 - [x] P3d: re-run the minixrs three-boot matrix against the rebuilt SDK
 - [x] P4a: libc-minixrs — the fork, and `verify/check-libc-abi.sh` green
-- [ ] P4b: rust-minixrs — target spec and std port; `./x build --stage 1
+- [x] P4b: rust-minixrs — target spec and std port; `./x build --stage 1
       library` succeeds for host and target
 - [ ] P4c / M5: `scripts/build-rust.sh` and `verify/check-rust.sh` — a bare
       `cargo +minixrs build --target aarch64-unknown-minixrs` links a branded
@@ -155,8 +156,8 @@ the org — shares object storage upstream, so creating it costs no upload).
 Checked out at `$MINIXRS_FORKS_DIR/llvm-minixrs` on the case-sensitive volume
 (`scripts/forks-volume.sh`).
 
-**Pinned base: tag `llvmorg-22.1.8`** (`ca7933e47d3a`) — the exact LLVM the
-pinned nightly reports, so the same series later serves rustc (P4). The fork
+**Pinned base: tag `llvmorg-22.1.8`** (`ca7933e47d3a`) — the LLVM
+`nightly-2026-07-23` reported, so the same series later serves rustc (P4). The fork
 branches from the tag rather than the moving `release/22.x` head, which is
 what makes the exported series reproducible; `MINIXRS_LLVM_BASE` defaults to
 it.

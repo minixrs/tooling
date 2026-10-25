@@ -1,0 +1,43 @@
+From b12c9d16bf73c1078b2ad97b0462c9e2a09bfab6 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Sun, 4 Oct 2026 16:07:34 -0500
+Subject: [PATCH 5/7] minixrs target: replace the option comments with TODOs
+
+The comments on dynamic_linking and panic_strategy are the maintainer's
+own, written in review. Both are TODOs on purpose: tidy's style check
+keeps failing on them until static-only linking and the missing
+unwinder are resolved.
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ compiler/rustc_target/src/spec/base/minixrs.rs | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/compiler/rustc_target/src/spec/base/minixrs.rs b/compiler/rustc_target/src/spec/base/minixrs.rs
+index 0fa58160f63..3ea22d66c76 100644
+--- a/compiler/rustc_target/src/spec/base/minixrs.rs
++++ b/compiler/rustc_target/src/spec/base/minixrs.rs
+@@ -4,8 +4,8 @@ pub(crate) fn opts() -> TargetOptions {
+     TargetOptions {
+         os: Os::Minixrs,
+         families: cvs!["unix"],
+-        // minixrs has no dynamic loader: every program is a static `ET_EXEC`,
+-        // as the SDK's C programs are.
++        // TODO: fix dynamic linking before pushing upstream. minixrs can only load static ELF
++        // files today. Keep this false until the kernel gets further along.
+         dynamic_linking: false,
+         relocation_model: RelocModel::Static,
+         position_independent_executables: false,
+@@ -13,7 +13,8 @@ pub(crate) fn opts() -> TargetOptions {
+         crt_static_respected: true,
+         crt_static_allows_dylibs: false,
+         has_thread_local: true,
+-        // No unwinder is linked yet.
++        // TODO: add the unwinder once we have libc able to handle memory and the stack from the
++        // kernel
+         panic_strategy: PanicStrategy::Abort,
+         ..Default::default()
+     }
+-- 
+2.55.0
+

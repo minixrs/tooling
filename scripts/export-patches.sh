@@ -7,8 +7,9 @@
 # Usage: export-patches.sh [all|llvm|musl|rust|libc ...]     (default: all)
 #
 # Base refs (the upstream point each fork branched from) can be overridden:
-#   MINIXRS_LLVM_BASE   default llvmorg-22.1.8   (the LLVM the pinned nightly
-#                       reports; the fork branches from the tag, not the
+#   MINIXRS_LLVM_BASE   default llvmorg-22.1.8   (the LLVM nightly-2026-07-23
+#                       reported; the current pin's rustc accepts it as an
+#                       external LLVM. The fork branches from the tag, not the
 #                       moving release/22.x head, so the exported series is
 #                       reproducible)
 #   MINIXRS_MUSL_BASE   default v1.2.6   (the tag the port branch is based on;

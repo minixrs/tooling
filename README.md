@@ -64,7 +64,7 @@ those repos.
 | `~/src/minixrs` | the OS (phase 5 complete) — **not** a fork, stays a sibling of this repo (`$MINIXRS_SRC`) | exists |
 | `$MINIXRS_FORKS_DIR/llvm-minixrs` | llvm-project fork at `llvmorg-22.1.8`, branch `minixrs/release/22.x` | P2 |
 | `$MINIXRS_FORKS_DIR/musl-minixrs` | musl fork at `v1.2.6`, branch `minixrs` (crt1 carries the brand) | exists |
-| `$MINIXRS_FORKS_DIR/rust-minixrs` | rust fork at pin commit `6f72b5dd5` | P4 |
+| `$MINIXRS_FORKS_DIR/rust-minixrs` | rust fork at pin commit `21b707e3f`, branch `minixrs/nightly-2026-10-01` | P4 |
 | `$MINIXRS_FORKS_DIR/libc-minixrs` | libc crate fork (`src/unix/minixrs/`) | P4 |
 
 `$MINIXRS_SDK` deliberately stays on the normal filesystem
@@ -125,5 +125,5 @@ from P4 on the designs under [docs/superpowers/specs/](docs/superpowers/specs/)
 `patches/*/` is `git format-patch` output, re-exported by
 `scripts/export-patches.sh` after every fork rebase. `llvm/` holds 5 patches
 (0001–0005 from P2b; 0006, the P3b image base, was dropped by P3d), `musl/`
-the port series, and `libc/` 2 patches (P4a); `rust/` stays empty until its
-fork exists.
+the port series, `libc/` 3 patches (P4a, P4b), and `rust/` the 7-patch
+rust-minixrs series (P4b).

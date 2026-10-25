@@ -1,0 +1,37 @@
+From 58421ad3a112879ad7099fd61984ed346c97c355 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Sun, 25 Oct 2026 06:00:23 -0500
+Subject: [PATCH 6/7] minixrs target: replace the target spec comments
+
+The comments on the feature list and the linker are the maintainer's
+own, written in review.
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ .../src/spec/targets/aarch64_unknown_minixrs.rs           | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs b/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs
+index 4027e4287c9..7374cf1b04f 100644
+--- a/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs
++++ b/compiler/rustc_target/src/spec/targets/aarch64_unknown_minixrs.rs
+@@ -4,13 +4,11 @@ pub(crate) fn target() -> Target {
+     let mut base = base::minixrs::opts();
+     base.max_atomic_width = Some(128);
+     base.stack_probes = StackProbeType::Inline;
+-    // What `clang --target=aarch64-unknown-minixrs` enables, so C and Rust
+-    // objects in one image agree.
++    // Keep C compile with clang --target=aarch64-unknown-minixrs in sync
+     base.features = "+v8a,+fp-armv8,+neon".into();
+     base.frame_pointer = FramePointer::NonLeaf;
+-    // The minixrs SDK's clang, by its triple-prefixed name: invoked so, it
+-    // targets minixrs, selects musl-minixrs's crt objects (which carry the
+-    // image brand) and passes the minixrs layout flags to lld.
++    // Needed to pick up the musl-minixrs crt objects. PT_NOTE field required
++    // for PT_LOAD in the kernel
+     base.linker = Some("aarch64-unknown-minixrs-clang".into());
+ 
+     Target {
+-- 
+2.55.0
+

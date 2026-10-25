@@ -67,6 +67,11 @@ apply here):
 - **A fork session executing a plan from here appends to this repo's ledger by
   hand** (`.superpowers/sdd/<plan>/progress.md`), and skips USER-GATED steps,
   recording them as awaiting the user.
+- **rust-minixrs carries rust-lang/rust's `AGENTS.md`**, which gates LLM edits
+  (a named reviewer, no LLM-written docs or comments, no `rustc_target`
+  implementation). A session there proceeds only after the user states the
+  personal-use / no-upstream exemption in that session, and treats any push —
+  or a patch export here — as a stop for the user.
 
 Review habits that carry over, each of which caught real defects in minixrs:
 
@@ -197,7 +202,11 @@ are the failure mode here: the scripts are mostly preconditions.
 - **Seed fork clones from an existing checkout.** `git clone --reference <checkout>
   --dissociate --branch <tag> --single-branch` cut llvm-project to ~90 s. A GitHub org
   fork shares object storage with upstream, so `gh repo fork` costs no upload and the
-  first branch push takes seconds.
+  first branch push takes seconds. `gh repo fork <repo>` rejects `--remote`; with a
+  repository argument it adds no remote anyway.
+- **A toolchain bump owes a clean target dir.** `nightly-2026-10-01`'s cargo moved
+  build-dir units to `build/<pkg>/<hash>/out/`; minixrs's local boot matrix passed on
+  a stale `deps/` rlib from the old nightly while CI failed (minixrs #63).
 - **Plan docs can carry stale upstream facts.** `docs/plans/llvm-m2.md` originally warned
   of a `Triple::Minix` parse collision that no longer exists at the pinned LLVM. Verify
   such claims against the actual checkout before implementing.

@@ -227,6 +227,12 @@ are the failure mode here: the scripts are mostly preconditions.
   consumed reports a false green. The same holds for a new assertion in a gate
   script: add it *before* the fix is installed, so the failing run is free proof
   that it is load bearing.
+- **Mutation-prove a gate without editing a fork** by breaking what the gate
+  builds, not the toolchain: a `build.rs` emitting
+  `cargo:rustc-link-arg=-nostartfiles` drops the brand, and
+  `-Wl,--unresolved-symbols=ignore-all` leaves an undefined global. Steps that
+  read only the compiler (cfg, target features) can't be mutated this way;
+  test them against a foreign toolchain, or from the clang side.
 - **A grep hit is not the consumer.** `imageBase` appears in `lld/ELF/Writer.cpp`
   as a *diagnostic* threshold and in `LinkerScript.cpp` as the actual layout base;
   citing the first as the second put three wrong claims into a plan doc. Trace
@@ -238,6 +244,9 @@ are the failure mode here: the scripts are mostly preconditions.
 - **The Bash tool's shell is zsh.** `${PIPESTATUS[0]}` and `read -ra` fail or expand
   to nothing *silently*; a probe loop using them reported four identical results that
   were all the no-flags case. Wrap multi-step shell probes in `bash -c`.
+- **The Bash tool refuses `rm` inside a `bash -c` string** (a safety check it
+  cannot see into). Run removals as plain commands, or make a fresh directory
+  rather than clearing an old one.
 - **Bash arithmetic has no `_` digit separators.** Mirroring a minixrs constant like
   `0x0020_0000` into shell must drop them, or `$(( ))` parses `_0000` as a variable
   name (see `verify/check-image.sh`).

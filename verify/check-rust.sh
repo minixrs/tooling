@@ -127,7 +127,7 @@ cargo_path="$(rustup which --toolchain "$TC" cargo 2>/dev/null)" || cargo_path="
 if [ "$(resolve_file "$cargo_path")" = "$(resolve_file "$RUST_DIR/bin/cargo")" ]; then
     pass "cargo +$TC is $RUST_DIR/bin/cargo"
 else
-    bad "cargo +minixrs is not the SDK's (rustup would fall back to another toolchain's): $cargo_path"
+    bad "cargo +$TC is not the SDK's (rustup would fall back to another toolchain's): $cargo_path"
 fi
 end_step
 

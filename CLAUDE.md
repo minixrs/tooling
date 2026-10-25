@@ -145,7 +145,7 @@ Mount the forks volume first — every fork-consuming script fails fast without 
   [OUTDIR]` (package `minixrs-gen-c-headers`) emits `include/minixrs/*.h` plus the
   `abi-selftest.c` that `build-sysroot.sh` compiles under `-nostdinc`.
 
-### Cross-building runtimes (compiler-rt today; musl and rust next)
+### Cross-building runtimes with CMake (compiler-rt)
 
 CMake defaults to the host and says nothing. All four traps below were hit on
 `build-compiler-rt.sh`'s first real run:
@@ -274,10 +274,11 @@ are the failure mode here: the scripts are mostly preconditions.
   leaves `RUSTFLAGS` set. Run any rust or cross build under
   `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables.
   Nothing in P4b was affected (hello relinked byte-identical with both unset);
-  `build-rust.sh` unsets them for bootstrap, and `check-rust.sh` builds under
+  `build-rust.sh` unsets them for bootstrap (unset, not empty — bootstrap passes
+  its own flags through `RUSTFLAGS`), and `check-rust.sh` builds under
   `env -i`.
 - **rustup's fallback cargo for a linked toolchain is the `nightly` toolchain's,
-  whatever version that is** (1.97 here), so a machine whose `nightly` is not the
+  whatever version that is** (cargo 1.97 on 2026-10-25), so a machine whose `nightly` is not the
   pin runs a version-skewed cargo. `build-rust.sh` installs the pin's cargo,
   whose commit G7 compares to the fork's `src/tools/cargo` gitlink.
 - **`~/.cargo/config.toml` is in scope for every cargo build**, cwd

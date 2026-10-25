@@ -2,7 +2,9 @@
 
 One prefix holds the whole SDK. Default `~/toolchains/minixrs`; every script
 sources `scripts/env.sh`, and consumers (minixrs CI, the cmake toolchain
-file, future rustc builds) read the `MINIXRS_SDK` environment variable.
+file) read the `MINIXRS_SDK` environment variable. `build-rust.sh` reads it to
+install the Rust toolchain; the installed toolchain does not, and needs
+`$MINIXRS_SDK/bin` on `PATH` to find its linker.
 
 ```
 $MINIXRS_SDK/

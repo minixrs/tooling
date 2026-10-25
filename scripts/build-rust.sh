@@ -94,8 +94,10 @@ done
 
 # G4: the LLVM components rustc_llvm links, read from the checkout so a rebase
 # that adds one is caught here rather than at rustc's link (spec, Risks). The
-# array spans lines, hence the sed range.
-REQUIRED="$(sed -n '/^const REQUIRED_COMPONENTS/,/;/p' "$RUST_SRC/compiler/rustc_llvm/build.rs" |
+# array may span lines, so awk prints from the declaration to the first `];`
+# (a sed range would not stop on a one-line array).
+REQUIRED="$(awk '/^const REQUIRED_COMPONENTS/ { f = 1 } f { print } f && /\];/ { exit }' \
+    "$RUST_SRC/compiler/rustc_llvm/build.rs" 2>/dev/null |
     grep -o '"[a-z0-9]*"' | tr -d '"' || true)"
 if [ -z "$REQUIRED" ]; then
     cat >&2 <<EOF
@@ -142,7 +144,7 @@ fi
 # G6: libc-minixrs pinned by tag (design R12). The tag and the commit Cargo
 # resolved it to both go into the stamp.
 LIBC_PIN="$(sed -n 's|^source = "git+https://github.com/minixrs/libc-minixrs?tag=\([^#"]*#[0-9a-f]*\)"$|\1|p' \
-    "$RUST_SRC/library/Cargo.lock" 2>/dev/null | head -1)"
+    "$RUST_SRC/library/Cargo.lock" 2>/dev/null | head -1 || true)"
 if [ -z "$LIBC_PIN" ]; then
     cat >&2 <<EOF
 build-rust: $RUST_SRC/library/Cargo.lock does not take libc-minixrs by tag
@@ -186,7 +188,8 @@ link_toolchain() {
 # Freshness. The stamp keys on the fork commit, the libc-minixrs tag and the
 # commit it resolved to, and the compiler identity — the same reasoning as
 # build-musl.sh's. The relink is cheap and repairs a toolchain someone
-# unlinked.
+# unlinked. Freshness is per commit: a build from a dirty fork tree is stamped
+# as HEAD (as in build-musl.sh), so uncommitted fork edits need --force.
 # ---------------------------------------------------------------------------
 if [ "$FORCE" -eq 0 ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$WANT" ] \
     && [ -x "$RUST_DIR/bin/rustc" ] && [ -x "$RUST_DIR/bin/cargo" ]; then

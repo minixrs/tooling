@@ -45,8 +45,11 @@ export MINIXRS_GEN_C_HEADERS_DIR="${MINIXRS_GEN_C_HEADERS_DIR:-$MINIXRS_FORKS_DI
 # minixrs owns it (rust-toolchain.toml); a bump changes both together, here.
 # Kept in one place because build-rust.sh, check-libc-abi.sh and
 # export-patches.sh all read it, and a default duplicated in scripts drifts.
-export MINIXRS_NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-10-01}"
-export MINIXRS_RUST_BASE="${MINIXRS_RUST_BASE:-21b707e3f97e0b522ebd2f277a862339625ad83f}"
+# Deliberately not exported: a user who sources env.sh would carry the pin in
+# their shell, and after a bump that stale value would beat the new default in
+# every child script. A caller's own exported value still wins, as an override.
+MINIXRS_NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-10-01}"
+MINIXRS_RUST_BASE="${MINIXRS_RUST_BASE:-21b707e3f97e0b522ebd2f277a862339625ad83f}"
 
 case ":$PATH:" in
     *":$MINIXRS_SDK/bin:"*) ;;

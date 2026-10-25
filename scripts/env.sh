@@ -41,6 +41,13 @@ export MINIXRS_SRC="${MINIXRS_SRC:-$(dirname "$_MINIXRS_REPO_ROOT")/minixrs}"
 # to agree on one path, and a default duplicated in two scripts drifts.
 export MINIXRS_GEN_C_HEADERS_DIR="${MINIXRS_GEN_C_HEADERS_DIR:-$MINIXRS_FORKS_DIR/build/gen-c-headers}"
 
+# The program's one Rust pin: the nightly and the rustc commit it was cut from.
+# minixrs owns it (rust-toolchain.toml); a bump changes both together, here.
+# Kept in one place because build-rust.sh, check-libc-abi.sh and
+# export-patches.sh all read it, and a default duplicated in scripts drifts.
+export MINIXRS_NIGHTLY="${MINIXRS_NIGHTLY:-nightly-2026-10-01}"
+export MINIXRS_RUST_BASE="${MINIXRS_RUST_BASE:-21b707e3f97e0b522ebd2f277a862339625ad83f}"
+
 case ":$PATH:" in
     *":$MINIXRS_SDK/bin:"*) ;;
     *) export PATH="$MINIXRS_SDK/bin:$PATH" ;;

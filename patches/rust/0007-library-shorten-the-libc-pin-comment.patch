@@ -1,0 +1,25 @@
+From 38030f361c53916762970c9924941e3b4f95924e Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Sun, 25 Oct 2026 06:00:55 -0500
+Subject: [PATCH 7/7] library: shorten the libc pin comment
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ library/Cargo.toml | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/library/Cargo.toml b/library/Cargo.toml
+index d5e14cdd5ef..7359c3e36d8 100644
+--- a/library/Cargo.toml
++++ b/library/Cargo.toml
+@@ -89,6 +89,5 @@ rustc-std-workspace-std = { path = 'rustc-std-workspace-std' }
+ # See comments in `library/windows-sys/Cargo.toml` for why this is patched
+ windows-sys = { path = 'windows-sys' }
+ 
+-# minixrs: the libc fork that knows target_os = "minixrs". Pinned by tag —
+-# fork branches are force-pushed, so a branch or bare SHA can be orphaned.
++# minixrs: the libc fork that knows target_os = "minixrs".
+ libc = { git = "https://github.com/minixrs/libc-minixrs", tag = "minixrs-0.2.189-1" }
+-- 
+2.55.0
+

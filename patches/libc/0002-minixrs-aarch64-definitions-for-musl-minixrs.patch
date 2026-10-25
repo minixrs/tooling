@@ -1,7 +1,7 @@
-From b2422a14306bf1ca9cb0852eb6c33a7711ec91b0 Mon Sep 17 00:00:00 2001
+From 92c03d4b29305b605e6ea0ec09b4ce5119278128 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Thu, 1 Oct 2026 00:56:24 -0500
-Subject: [PATCH 2/2] minixrs: aarch64 definitions for musl-minixrs
+Subject: [PATCH 2/3] minixrs: aarch64 definitions for musl-minixrs
 
 The 45 types, structs and constants src/unix/mod.rs needs from an OS
 module, copied from the Linux-musl-aarch64 definitions. Each is checked

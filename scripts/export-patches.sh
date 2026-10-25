@@ -7,14 +7,15 @@
 # Usage: export-patches.sh [all|llvm|musl|rust|libc ...]     (default: all)
 #
 # Base refs (the upstream point each fork branched from) can be overridden:
-#   MINIXRS_LLVM_BASE   default llvmorg-22.1.8   (the LLVM the pinned nightly
-#                       reports; the fork branches from the tag, not the
+#   MINIXRS_LLVM_BASE   default llvmorg-22.1.8   (the LLVM nightly-2026-07-23
+#                       reported; the current pin's rustc accepts it as an
+#                       external LLVM. The fork branches from the tag, not the
 #                       moving release/22.x head, so the exported series is
 #                       reproducible)
 #   MINIXRS_MUSL_BASE   default v1.2.6   (the tag the port branch is based on;
 #                       bump this in the same change as any fork rebase)
-#   MINIXRS_RUST_BASE   default 6f72b5dd5   (the minixrs rustc pin commit)
-#   MINIXRS_LIBC_BASE   default 0.2.185   (the libc version std pins at the
+#   MINIXRS_RUST_BASE   default 21b707e3f   (the minixrs rustc pin commit)
+#   MINIXRS_LIBC_BASE   default 0.2.189   (the libc version std pins at the
 #                       minixrs rustc pin; bump with any fork rebase)
 #
 # "all" skips forks that aren't cloned yet; naming a fork explicitly errors
@@ -49,8 +50,8 @@ run_one() { # <name> <required>
     case "$1" in
         llvm) export_fork llvm llvm-minixrs "${MINIXRS_LLVM_BASE:-llvmorg-22.1.8}" "$2" ;;
         musl) export_fork musl musl-minixrs "${MINIXRS_MUSL_BASE:-v1.2.6}" "$2" ;;
-        rust) export_fork rust rust-minixrs "${MINIXRS_RUST_BASE:-6f72b5dd5}" "$2" ;;
-        libc) export_fork libc libc-minixrs "${MINIXRS_LIBC_BASE:-0.2.185}" "$2" ;;
+        rust) export_fork rust rust-minixrs "${MINIXRS_RUST_BASE:-21b707e3f}" "$2" ;;
+        libc) export_fork libc libc-minixrs "${MINIXRS_LIBC_BASE:-0.2.189}" "$2" ;;
         *)
             echo "export-patches: unknown fork '$1' (llvm|musl|rust|libc|all)" >&2
             exit 3

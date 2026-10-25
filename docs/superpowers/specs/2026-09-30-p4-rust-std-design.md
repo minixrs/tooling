@@ -24,10 +24,16 @@ P4 is the first of several Rust phases. Later phases widen libc-minixrs and the 
 kernel grows; upstreaming is archived in [`docs/archive/upstreaming.md`](../../archive/upstreaming.md)
 until those are done.
 
+## The pin
+
+P4b and P4c build at **`nightly-2026-10-01`**: rustc 1.101.0, commit `21b707e3f`, LLVM 23.1.1, and std pins libc **0.2.189**. That moved from `nightly-2026-07-23` before P4b started, ruled on 2026-10-01, and the minixrs repo moves in lockstep, so the kernel and rust-minixrs share one pin. P4a shipped at the old pin and its libc base 0.2.185; P4b rebases libc-minixrs onto 0.2.189.
+
+**The SDK's LLVM stays at 22.1.8**, one major behind the nightly's own. The pinned rustc accepts an external LLVM from 21 up, and rust-lang's CI tests 21 and 22 (R10). Rebasing llvm-minixrs to 23 is a separate, P3-sized job, and nothing in P4 needs it.
+
 ## Why the boot is not in P4
 
-Verified against the pinned nightly's `library/` (`nightly-2026-07-23`), the musl fork, and the
-minixrs trackers on 2026-09-29:
+Verified on 2026-09-29 against the musl fork, the minixrs trackers, and `library/` at the then
+pin (`nightly-2026-07-23`). Both std sites below are unchanged at `nightly-2026-10-01`:
 
 - **`malloc` has no memory.** `musl-minixrs`'s `src/minixrs/_syscall.c` dispatches six calls
   (`writev`, `write`, `exit`, `exit_group`, `set_tid_address`, `ioctl`); its default arm returns
@@ -46,7 +52,7 @@ verified on the host.
 | # | Decision | Rejected alternative, and why |
 |---|---|---|
 | **R1** | P4 ends at M5 (build + link + host checks). M4 (boot) opens the next phase. | P4 includes the boot — blocks on minixrs chunk 5. |
-| **R2** | The patched **clang is the linker driver** for Rust binaries: `linker-flavor: gnu-cc`, `linker: clang`, pre-link arg `--target=aarch64-unknown-minixrs`. | `rust-lld` with self-contained crt objects — restates the driver's crt order and `-z` flags in the target spec, and the two copies drift. The brand only reaches a binary through musl-minixrs's `crt1.o`, which the driver already selects. |
+| **R2** | The patched **clang is the linker driver** for Rust binaries: `linker-flavor: gnu-cc`, `linker: aarch64-unknown-minixrs-clang` — the SDK's clang under its triple-prefixed name (a symlink in `$MINIXRS_SDK/bin`), from which clang infers `--target`. A bare `clang` would resolve through `PATH` to Apple's, which does not know the triple. | `rust-lld` with self-contained crt objects — restates the driver's crt order and `-z` flags in the target spec, and the two copies drift. The brand only reaches a binary through musl-minixrs's `crt1.o`, which the driver already selects. |
 | **R3** | **`panic = "abort"` only.** No unwinder is built or linked. | Shipping LLVM libunwind — the largest item in the phase, and untestable because nothing boots. Owed later; see the [ledger](#owed-later). |
 | **R4** | std reuses `sys/pal/unix` with `target_os = "minixrs"` branches; `families: ["unix"]`, `env: ""`. | A dedicated IPC-speaking PAL — thousands of lines duplicating musl-minixrs, and contrary to roadmap locked decision 1. `env: "musl"` — drags in Linux-musl `cfg` paths across crates.io. |
 | **R5** | **No fake success in std.** Where the kernel lacks a call, std calls musl, musl answers `-ENOSYS`, and std returns `Err` or tolerates the errno. When the kernel grows the call, the feature turns on with no std change. | Stubbing calls to succeed — hides kernel gaps and needs a second std change later. |
@@ -54,9 +60,9 @@ verified on the host.
 | **R7** | The libc ABI gate is a **host-side byte comparison** of C-emitted and Rust-emitted tables (`verify/check-libc-abi.sh`). | The roadmap's "Rust-consts emitter in minixrs gen-c-headers" — needs a minixrs change, and covers constants only. Errno parity is already transitive: `abi-selftest.c` proves musl's errnos equal minixrs's, and R7 proves libc-minixrs's equal musl's. |
 | **R8** | Build **stage 1**: a stage-1 rustc plus stage-1 std for host and target. | Stage 2 — roughly double the build, and only needed to ship a compiler. |
 | **R9** | The toolchain is **installed to `$MINIXRS_SDK/rust/`** and rustup links that. | Linking the build tree on the forks volume — breaks `cargo +minixrs` whenever the volume is unmounted, against the `MINIXRS_SDK` contract. |
-| **R10** | rustc links the **installed llvm-minixrs** through `llvm-config`. The SDK's LLVM is 22.1.8, static, AArch64-only; the host is AArch64 too, so one backend serves both. | Patching `src/llvm-project` and building LLVM again — stays the documented fallback if the external LLVM is rejected. |
+| **R10** | rustc links the **installed llvm-minixrs** through `llvm-config`. The SDK's LLVM is 22.1.8, static, AArch64-only; the host is AArch64 too, so one backend serves both. The pinned rustc's own LLVM is 23.1.1, but it accepts an external LLVM from 21 up ([The pin](#the-pin)). | Patching `src/llvm-project` and building LLVM again — stays the documented fallback if the external LLVM is rejected. |
 | **R11** | minixrs **keeps** its target JSON and `check-cfg` shims through P4. | Deleting them at M5 as the roadmap said — minixrs CI would then need the fork toolchain, which has no runner story. Owed later. |
-| **R12** | rust-minixrs pins libc-minixrs by **git tag** (`minixrs-0.2.185-N`) in `library/Cargo.toml`'s existing `[patch.crates-io]`. | A branch or bare SHA — fork branches are force-pushed, so a SHA can be orphaned. A path dependency — makes the exported patch series unbuildable elsewhere. |
+| **R12** | rust-minixrs pins libc-minixrs by **git tag** (`minixrs-0.2.189-N`) in `library/Cargo.toml`'s existing `[patch.crates-io]`. | A branch or bare SHA — fork branches are force-pushed, so a SHA can be orphaned. A path dependency — makes the exported patch series unbuildable elsewhere. |
 
 ## Slices
 
@@ -74,9 +80,10 @@ cannot finish until a libc-minixrs tag exists.
 
 ## P4a — libc-minixrs
 
-- **Fork:** `minixrs/libc-minixrs`, from `rust-lang/libc` tag `0.2.185` — the version std pins in
-  `library/Cargo.lock`. Branch `minixrs/0.2.185`, rebase-maintained, force-pushed; tags
-  `minixrs-0.2.185-N` are never moved.
+- **Fork:** `minixrs/libc-minixrs`, from `rust-lang/libc` tag `0.2.185`, the version std pinned
+  in `library/Cargo.lock` at the old nightly. Branch `minixrs/0.2.185`, with tags `minixrs-0.2.185-N`
+  that are never moved. P4b rebases the series onto `0.2.189`, the new pin's version, as branch
+  `minixrs/0.2.189` with tags `minixrs-0.2.189-N`. The old branch and tags stay as history.
 - **Content:** one self-contained module, `src/unix/minixrs/`, plus three registration points:
   `build.rs`, `src/unix/mod.rs`, and `src/new/mod.rs` with a small `src/new/minixrs/`. The last
   is not optional the way Hurd's is: the Unix family re-exports a `unistd` module that normally
@@ -121,8 +128,8 @@ hide behind a checked one.
 
 ## P4b — rust-minixrs
 
-- **Fork:** `minixrs/rust-minixrs` at commit `6f72b5dd5` (the pinned nightly). Branch
-  `minixrs/nightly-2026-07-23`, rebase-maintained; series exported to `patches/rust/`.
+- **Fork:** `minixrs/rust-minixrs` at commit `21b707e3f` (the pinned nightly). Branch
+  `minixrs/nightly-2026-10-01`, rebase-maintained; series exported to `patches/rust/`.
 
 ### Target spec
 
@@ -131,9 +138,10 @@ hide behind a checked one.
 | `llvm-target` | `aarch64-unknown-minixrs` | The real triple; rustc now links an LLVM that knows it |
 | `os` / `env` / `vendor` | `minixrs` / `""` / `unknown` | R4 |
 | `families` | `["unix"]` | R4 |
-| linker | `gnu-cc`, `clang`, pre-link `--target=aarch64-unknown-minixrs` | R2 |
+| linker | `gnu-cc`, `aarch64-unknown-minixrs-clang` | R2 |
 | `features` | `+v8a,+fp-armv8,+neon` | Exactly what `clang --target=aarch64-unknown-minixrs -###` reports, so C and Rust objects agree |
-| relocation | `static`; no PIE; `crt-static` default on and not switchable; no dynamic linking | The SDK's C hello is `ET_EXEC`; minixrs has no dynamic loader |
+| relocation | `static`; no PIE; `crt-static` default on and respected; no dynamic linking | The SDK's C hello is `ET_EXEC`; minixrs has no dynamic loader. rustc refuses a target whose static CRT is not `crt_static_respected`; `-C target-feature=-crt-static` simply fails to link, there being no shared libc |
+| frame pointer, stack probes | non-leaf; inline | What clang uses for the triple (`-mframe-pointer=non-leaf…`), as aarch64-linux does |
 | `panic-strategy` | `abort` | R3 |
 | `has-thread-local` | `true` | ELF TLS, as clang emits for C |
 | metadata | tier 3, `std: true`, `host_tools: false` | |
@@ -152,18 +160,25 @@ an explicit OS list; minixrs is not on it and gets the no-op. The edits:
 |---|---|---|
 | `sys/pal/unix/mod.rs`, `sanitize_standard_fds` | `ENOSYS` from `poll` breaks to the `fcntl` fallback, as the existing Unikraft arm does | R6, startup abort |
 | `sys/pal/unix/mod.rs`, `reset_sigpipe` | The `rtassert!` on `signal()` tolerates `ENOSYS` on minixrs | R6, startup abort |
-| `unwind/src/lib.rs` | minixrs joins the group that links no unwinder library | R3 |
+| `unwind/src/lib.rs`, new `unwind/src/minixrs.rs` | A **null unwinder**: the four entry points backtrace-rs links on every Unix target (`_Unwind_Backtrace`, answering end-of-stack before the first frame, and three accessors it never reaches). Every captured backtrace is empty, which std already reports as `Unsupported` | R3, link. backtrace-rs is a submodule, so gating it means a third fork; gating std's two callers leaves dead variables `-D warnings` rejects |
+| `panic_unwind/src/lib.rs`, `sys/personality/mod.rs` | The `dummy` panic runtime and no gcc personality, as for espidf and nuttx | R3, compile — bootstrap builds the `panic-unwind` feature for every target |
+| `sys/io/error/unix.rs` | `errno_location` links as `__errno_location`, musl's name | R6, link |
 | `sys/random/mod.rs` | Selects `unix_legacy` (`/dev/urandom`) | R6, the default arm selects nothing and does not compile |
 | `sys/thread_local/mod.rs` | Joins Hurd's `linux_like` destructor arm | R6, compile |
 | `std/build.rs` | Added to the "no special requirements" list | std refuses to build otherwise |
 | `os/mod.rs`, new `os/minixrs/{mod,fs,raw}.rs` | `std::os::minixrs`, mirroring `os/hurd` | R6, compile |
-| `sys/{args,env_consts,fd,fs,paths,pipe,process,thread,time,net}` | One `target_os` entry wherever Hurd has one | R6, compile |
-| `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.185-N" }`; `Cargo.lock` regenerated | R12 |
+| `sys/{args,env_consts,fd,fs,paths,pipe,thread,net}`, `os/unix` | minixrs takes the arm linux-musl takes where Hurd's arm is a POSIX or musl path; not glibc's `*64` aliases or Hurd-only items. The P4b plan decides every site | R6, compile; R4 |
+| `library/Cargo.toml` | `[patch.crates-io] libc = { git = …, tag = "minixrs-0.2.189-N" }`; `Cargo.lock` regenerated | R12 |
 
-The plan enumerates the exact sites from `grep -rn '"hurd"' library/` (30 files, 95 hits at the
-pin) and decides each one; "Hurd has a line here" is a prompt to look, not a rule to copy. The
-compiler side also needs the target registered with bootstrap's sanity check, since the stage-0
-compiler does not know the triple.
+The plan enumerates the exact sites from `git -C ~/src/minixrs-forks/rust-minixrs grep -n '"hurd"' 21b707e3f -- library/` (29 files, 101 hits at the
+pin, excluding the backtrace submodule; 32 of them doc-test attributes in `os/hurd/fs.rs`) and from every `target_env = "musl"` arm, and decides each one; "Hurd has a line here" is a
+prompt to look, not a rule to copy. The compiler side also needs the target registered with
+bootstrap's sanity check, since the stage-0 compiler does not know the triple, and a display name
+in rustdoc's exhaustive match on `Os`.
+
+std also needs more of libc-minixrs than P4a seeded: about 180 constants, functions and socket
+structs, which P4b adds under the same parity gate on the 0.2.189 rebase and releases as
+`minixrs-0.2.189-1`.
 
 ## P4c — tooling
 
@@ -180,6 +195,8 @@ merge-base with its branch is the pinned commit. Then:
 3. Install the stage-1 toolchain to `$MINIXRS_SDK/rust/` (R9).
 4. `rustup toolchain link minixrs "$MINIXRS_SDK/rust"`.
 
+Bootstrap runs under `env -u LIBRARY_PATH -u RUSTFLAGS` as well as the include-path variables: the SDK clang adds `LIBRARY_PATH` as a `-L` to every link, because upstream clang treats aarch64-darwin → aarch64-minixrs as not cross-compiling (`ToolChain::isCrossCompiling` compares only the arch).
+
 A stamp records the fork SHA, the libc-minixrs tag, and the clang version string, so a rebuild of
 any of the three invalidates it — the same reasoning as `build-musl.sh`'s stamp.
 
@@ -193,7 +210,9 @@ In order; any failure stops the script and nothing is installed:
 3. A fresh `cargo new` hello builds with a bare
    `cargo +minixrs build --target aarch64-unknown-minixrs`, run with `RUSTFLAGS` and
    `CARGO_ENCODED_RUSTFLAGS` unset and no `.cargo/config.toml` in scope.
-4. The output is `ET_EXEC`, has no undefined symbols, and contains no `_Unwind_*` symbol.
+4. The output is `ET_EXEC`, has no undefined global symbols, and defines no `_Unwind_*` symbol
+   but the null unwinder's four. (musl leaves `_DYNAMIC` a local hidden undefined, as in the C
+   hello; std's `__cxa_thread_atexit_impl` is weak.)
 5. `verify/check-brand.sh` and `verify/check-image.sh` pass on it.
 6. It is installed at `$MINIXRS_SDK/share/minixrs/hello-rs`.
 
@@ -203,8 +222,12 @@ the source, per `CLAUDE.md`'s "a new test that passes on its first run has not b
 ### Other tooling edits
 
 - `scripts/export-patches.sh` already has `rust` and `libc` arms. (The `libc` base default
-  moved from `upstream/main` to `0.2.185` in P4a; the `rust` default is already the pin.)
+  moved from `upstream/main` to `0.2.185` in P4a, and P4b moves it to `0.2.189` and the `rust`
+  default to `21b707e3f`.)
 - `docs/sysroot-layout.md` gains `rust/` and `share/minixrs/hello-rs`.
+- The `bin/aarch64-unknown-minixrs-clang` symlink the target spec names (R2) is installed by
+  `scripts/build-llvm.sh` and checked by `verify/check-driver.sh`; P4b adds it, because the
+  target spec depends on it.
 - `README.md` and `CLAUDE.md` gain the new scripts and gates.
 
 ## Owed later
@@ -214,12 +237,13 @@ prerequisites, so none can be dropped silently.
 
 | Owed | Unblocked by | Until then |
 |---|---|---|
-| **libunwind and `panic = "unwind"`** — a `scripts/build-libunwind.sh` cross-building LLVM libunwind into the SDK (expect the four CMake traps `build-compiler-rt.sh` hit), the `unwind` crate arm switched to link it, the target default reconsidered | A later phase; also needs `AT_PHDR`/`dl_iterate_phdr` to work for the image in question (`check-image.sh --boot-module` drops the `AT_PHDR` rule because boot modules lack it) | `catch_unwind` does not catch; no backtraces; crates requiring unwinding do not work |
+| **libunwind and `panic = "unwind"`** — a `scripts/build-libunwind.sh` cross-building LLVM libunwind into the SDK (expect the four CMake traps `build-compiler-rt.sh` hit), the `unwind` crate arm switched to link it and the null unwinder (`unwind/src/minixrs.rs`) deleted, the target default reconsidered | A later phase; also needs `AT_PHDR`/`dl_iterate_phdr` to work for the image in question (`check-image.sh --boot-module` drops the `AT_PHDR` rule because boot modules lack it) | `catch_unwind` does not catch; no backtraces; crates requiring unwinding do not work |
 | **M4 — a std hello boots on minixrs** | minixrs chunk 5 (`brk`/`mmap`) | `malloc` returns `NULL`; `hello-rs` aborts if booted |
 | TLS larger than musl's builtin block (16 words) | The same `mmap` | `__init_tls` crashes if std's `PT_TLS` does not fit; measure `hello-rs`'s `PT_TLS` at M4 |
 | `HashMap`'s default hasher | `/dev/urandom` in minixrs | Panics on first use |
 | SIGPIPE ignore; stack-overflow reporting | Signals (minixrs Phase 7) | Silently absent |
 | `thread::spawn`, `fs`, `process`, `net`, `time` | Their syscalls in musl-minixrs | Runtime `Err` carrying `ENOSYS` |
+| `thread::sleep` | `clock_nanosleep` in musl-minixrs | Panics: it returns `()`, so it has no `Err` to carry `ENOSYS`, and upstream asserts on any error other than `EINTR` — the same on every Unix arm, not a carve-out |
 | Delete minixrs's target JSON and `check-cfg` shims (R11) | A CI story for the fork toolchain | minixrs stays on `-Zbuild-std` |
 | Widening `src/unix/minixrs/` beyond std's needs | Demand from real crates | Crates using missing items fail to compile |
 

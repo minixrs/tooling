@@ -8,6 +8,12 @@
 #      and resolves crt objects out of $MINIXRS_SDK/sysroot/usr/lib
 #   3. link: assemble + link verify/testdata/branded.s and confirm the result
 #      carries the identity note (check-brand.sh exit 0)
+#   4. the triple-named driver: aarch64-unknown-minixrs-clang, next to clang,
+#      targets minixrs with no --target — it is the linker rustc's target
+#      spec names
+#   5. self-contained: clang loads no library from outside the OS, and
+#      llvm-config's system libraries link with no extra search path — rustc
+#      links this LLVM through llvm-config (P4 design R10)
 #
 # Step 3 is the "links a branded static ELF" half of the M2 gate. It works
 # before musl exists because the fixture carries the note in hand-written asm
@@ -47,7 +53,7 @@ skip() { echo "check-driver: SKIP $*"; }
 # ---------------------------------------------------------------- step 1
 # Everything downstream is meaningless if the target is unknown, so this one
 # is a hard gate rather than an accumulated failure.
-echo "check-driver: [1/3] preprocessor defines"
+echo "check-driver: [1/5] preprocessor defines"
 defines="$("$CLANG" --target="$TRIPLE" -dM -E -x c /dev/null 2>/dev/null || true)"
 missing=()
 for m in __minixrs__ __unix__ __ELF__; do
@@ -62,7 +68,7 @@ fi
 pass "__minixrs__, __unix__, __ELF__ defined"
 
 # ---------------------------------------------------------------- step 2
-echo "check-driver: [2/3] driver link line"
+echo "check-driver: [2/5] driver link line"
 : > "$tmp/empty.c"
 # -### writes the would-be commands to stderr and runs nothing.
 link_line="$("$CLANG" -### --target="$TRIPLE" -o "$tmp/empty.out" "$tmp/empty.c" 2>&1 || true)"
@@ -96,7 +102,7 @@ else
 fi
 
 # ---------------------------------------------------------------- step 3
-echo "check-driver: [3/3] link a branded static ELF"
+echo "check-driver: [3/5] link a branded static ELF"
 if "$CLANG" --target="$TRIPLE" -nostdlib -e _start \
         -o "$tmp/branded.elf" "$SCRIPT_DIR/testdata/branded.s" 2>"$tmp/link.err"; then
     if "$CHECK_BRAND" "$tmp/branded.elf"; then
@@ -107,6 +113,44 @@ if "$CLANG" --target="$TRIPLE" -nostdlib -e _start \
 else
     sed 's/^/check-driver:   /' "$tmp/link.err" >&2
     bad "could not link $SCRIPT_DIR/testdata/branded.s for $TRIPLE"
+fi
+
+# ---------------------------------------------------------------- step 4
+# rustc's target spec names this driver rather than `clang`, which PATH would
+# resolve to Apple's. clang takes its target from a triple-prefixed name.
+echo "check-driver: [4/5] triple-named driver"
+TRIPLE_CLANG="$(dirname "$CLANG")/$TRIPLE-clang"
+if [ ! -x "$TRIPLE_CLANG" ]; then
+    bad "$TRIPLE_CLANG not found — scripts/build-llvm.sh installs it"
+elif "$TRIPLE_CLANG" -dM -E -x c /dev/null 2>/dev/null | grep -qE '^#define __minixrs__\b'; then
+    pass "$TRIPLE-clang targets minixrs without --target"
+else
+    bad "$TRIPLE_CLANG does not target $TRIPLE by its name"
+fi
+
+# ---------------------------------------------------------------- step 5
+# CMake enables optional dependencies it happens to find — Homebrew's zstd,
+# for one — and then clang, and every rustc linked through llvm-config,
+# depends on a package nothing here installs.
+echo "check-driver: [5/5] self-contained"
+foreign="$(otool -L "$CLANG" | tail -n +2 | awk '{print $1}' |
+    grep -vE '^(/usr/lib/|/System/Library/|@rpath/|@executable_path/)' || true)"
+if [ -z "$foreign" ]; then
+    pass "clang loads only OS libraries"
+else
+    bad "clang loads libraries from outside the OS: $(echo $foreign)"
+fi
+LLVM_CONFIG="$(dirname "$CLANG")/llvm-config"
+syslibs="$("$LLVM_CONFIG" --system-libs 2>/dev/null)" || syslibs="?"
+# env -u LIBRARY_PATH: cc adds it as -L, so a shell that reaches a zstd would false-green a -lzstd.
+# shellcheck disable=SC2086 # the list is meant to split into -l flags
+if [ "$syslibs" != "?" ] &&
+    printf 'int main(void) { return 0; }\n' |
+        env -u LIBRARY_PATH /usr/bin/cc -x c - -o "$tmp/syslibs" $syslibs 2>"$tmp/syslibs.err"; then
+    pass "llvm-config's system libraries ($syslibs) link from the OS"
+else
+    sed 's/^/check-driver:   /' "$tmp/syslibs.err" >&2 2>/dev/null || true
+    bad "llvm-config's system libraries ($syslibs) do not link without an extra -L"
 fi
 
 if [ "$fail" -eq 0 ]; then

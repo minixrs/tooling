@@ -1,0 +1,44 @@
+From 86858e74babb140ab11fe84ff178f41ffde740b3 Mon Sep 17 00:00:00 2001
+From: Kevin Barnard <kevin.barnard@gmail.com>
+Date: Fri, 2 Oct 2026 23:19:12 -0500
+Subject: [PATCH 2/7] library: take libc from libc-minixrs
+
+The libc fork that knows target_os = "minixrs", pinned by its release
+tag. Every item it adds is checked against the minixrs SDK's C headers
+by the minixrs tooling repo.
+
+Signed-off-by: Kevin Barnard <kevin.barnard@gmail.com>
+---
+ library/Cargo.lock | 3 +--
+ library/Cargo.toml | 4 ++++
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/library/Cargo.lock b/library/Cargo.lock
+index 98fa2c51174..4c5eb214b7b 100644
+--- a/library/Cargo.lock
++++ b/library/Cargo.lock
+@@ -154,8 +154,7 @@ dependencies = [
+ [[package]]
+ name = "libc"
+ version = "0.2.189"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
++source = "git+https://github.com/minixrs/libc-minixrs?tag=minixrs-0.2.189-1#a99f4c9a5f2af95cbfadb5b7198b09a65975f655"
+ dependencies = [
+  "rustc-std-workspace-core",
+ ]
+diff --git a/library/Cargo.toml b/library/Cargo.toml
+index 788c990c163..d5e14cdd5ef 100644
+--- a/library/Cargo.toml
++++ b/library/Cargo.toml
+@@ -88,3 +88,7 @@ rustc-std-workspace-std = { path = 'rustc-std-workspace-std' }
+ 
+ # See comments in `library/windows-sys/Cargo.toml` for why this is patched
+ windows-sys = { path = 'windows-sys' }
++
++# minixrs: the libc fork that knows target_os = "minixrs". Pinned by tag —
++# fork branches are force-pushed, so a branch or bare SHA can be orphaned.
++libc = { git = "https://github.com/minixrs/libc-minixrs", tag = "minixrs-0.2.189-1" }
+-- 
+2.55.0
+

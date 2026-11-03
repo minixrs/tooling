@@ -1,7 +1,7 @@
 From f1db256ff447b4e5fb41dffed58972a9fd133d10 Mon Sep 17 00:00:00 2001
 From: Kevin Barnard <kevin.barnard@gmail.com>
 Date: Sun, 26 Jul 2026 18:21:24 -0500
-Subject: [PATCH] slice 5.6a: port musl to minix.rs IPC (aarch64)
+Subject: [PATCH 1/2] slice 5.6a: port musl to minix.rs IPC (aarch64)
 
 Replace musl's Linux syscall ABI with minix.rs message passing, so ordinary C
 compiled against this libc runs on a MINIX-style microkernel where every OS
@@ -851,5 +851,5 @@ index 41db68af..aa64582b 100644
  	ret
  __cp_cancel:
 -- 
-2.50.1 (Apple Git-155)
+2.55.0
 
